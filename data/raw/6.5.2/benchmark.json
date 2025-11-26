@@ -1,0 +1,63 @@
+{
+  "type": "jsonl_log",
+  "summary": {
+    "heuristic": {
+      "name": "C+C",
+      "makespan": 654.03406,
+      "served": 1,
+      "fitness": 0.26210544
+    },
+    "gp_best": {
+      "gen": 3,
+      "makespan": 550.7224,
+      "served": 0,
+      "fitness": 0.09439718,
+      "routing": "sum(TERM4, TERM0)",
+      "sequencing": "sub(TERM3, TERM2)"
+    }
+  },
+  "routes": [
+    {
+      "type": "LASTROUTE",
+      "vehicle": 0,
+      "route": {
+        "185": 6,
+        "282": 3,
+        "308": 1,
+        "643": 0
+      },
+      "dropped": []
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 1,
+      "route": {
+        "155": 2,
+        "270": 5,
+        "405": 4,
+        "550": 0
+      },
+      "dropped": []
+    }
+  ],
+  "final_routes": {
+    "0": {
+      "route": {
+        "185": 6,
+        "282": 3,
+        "308": 1,
+        "643": 0
+      },
+      "dropped": []
+    },
+    "1": {
+      "route": {
+        "155": 2,
+        "270": 5,
+        "405": 4,
+        "550": 0
+      },
+      "dropped": []
+    }
+  }
+}

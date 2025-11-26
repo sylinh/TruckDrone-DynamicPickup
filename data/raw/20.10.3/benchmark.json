@@ -1,0 +1,163 @@
+{
+  "type": "jsonl_log",
+  "summary": {
+    "heuristic": {
+      "name": "C+C",
+      "makespan": 780.7276,
+      "served": 14,
+      "fitness": 0.67095226
+    },
+    "gp_best": {
+      "gen": 1,
+      "makespan": 1065.182,
+      "served": 1,
+      "fitness": 0.100873,
+      "routing": "mul(sub(sum(max(TERM2, TERM0), min(TERM2, TERM1)), max(max(3, TERM1), div(TERM1, TERM0))), mul(max(min(TERM0, TERM3), sum(TERM4, TERM0)), sum(max(TERM3, TERM2), mul(TERM3, TERM1))))",
+      "sequencing": "sum(sum(sub(div(TERM3, TERM2), sub(TERM3, TERM0)), div(mul(TERM2, TERM2), sub(TERM0, TERM0))), sub(sum(mul(TERM0, TERM1), max(TERM5, TERM2)), div(sub(TERM2, TERM5), div(TERM5, TERM4))))"
+    }
+  },
+  "routes": [
+    {
+      "type": "LASTROUTE",
+      "vehicle": 0,
+      "route": {
+        "551": 9,
+        "1837": 0
+      },
+      "dropped": []
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 1,
+      "route": {
+        "1304": 0
+      },
+      "dropped": [
+        14,
+        18,
+        7,
+        3,
+        11,
+        16,
+        19,
+        2
+      ]
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 2,
+      "route": {
+        "229": 6,
+        "297": 17,
+        "329": 10,
+        "513": 12,
+        "710": 0,
+        "766": 15,
+        "853": 1,
+        "931": 13,
+        "1101": 0,
+        "1304": 0
+      },
+      "dropped": [
+        3,
+        16,
+        11,
+        18,
+        19,
+        7,
+        14,
+        2
+      ]
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 3,
+      "route": {
+        "392": 5,
+        "773": 4,
+        "845": 0,
+        "1060": 8,
+        "1086": 20,
+        "1304": 0
+      },
+      "dropped": [
+        19,
+        14,
+        7,
+        18,
+        3,
+        11,
+        16,
+        2
+      ]
+    }
+  ],
+  "final_routes": {
+    "0": {
+      "route": {
+        "551": 9,
+        "1837": 0
+      },
+      "dropped": []
+    },
+    "1": {
+      "route": {
+        "1304": 0
+      },
+      "dropped": [
+        14,
+        18,
+        7,
+        3,
+        11,
+        16,
+        19,
+        2
+      ]
+    },
+    "2": {
+      "route": {
+        "229": 6,
+        "297": 17,
+        "329": 10,
+        "513": 12,
+        "710": 0,
+        "766": 15,
+        "853": 1,
+        "931": 13,
+        "1101": 0,
+        "1304": 0
+      },
+      "dropped": [
+        3,
+        16,
+        11,
+        18,
+        19,
+        7,
+        14,
+        2
+      ]
+    },
+    "3": {
+      "route": {
+        "392": 5,
+        "773": 4,
+        "845": 0,
+        "1060": 8,
+        "1086": 20,
+        "1304": 0
+      },
+      "dropped": [
+        19,
+        14,
+        7,
+        18,
+        3,
+        11,
+        16,
+        2
+      ]
+    }
+  }
+}

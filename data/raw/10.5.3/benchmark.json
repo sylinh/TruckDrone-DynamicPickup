@@ -1,0 +1,79 @@
+{
+  "type": "jsonl_log",
+  "summary": {
+    "heuristic": {
+      "name": "C+C",
+      "makespan": 1003.14417,
+      "served": 2,
+      "fitness": 0.25147015
+    },
+    "gp_best": {
+      "gen": 6,
+      "makespan": 775.6905,
+      "served": 0,
+      "fitness": 0.05526495,
+      "routing": "max(sum(max(TERM4, mul(TERM3, sub(max(TERM1, TERM1), TERM1))), sub(max(TERM1, min(sum(TERM2, TERM1), div(TERM4, TERM1))), sub(TERM1, TERM4))), mul(sum(min(TERM4, TERM0), TERM1), sub(TERM4, sum(TERM2, TERM1))))",
+      "sequencing": "min(div(mul(min(sub(max(TERM0, TERM5), TERM0), mul(-1, TERM3)), max(sum(TERM0, TERM3), max(TERM4, TERM3))), sum(min(TERM5, TERM2), div(TERM0, TERM4))), TERM1)"
+    }
+  },
+  "routes": [
+    {
+      "type": "LASTROUTE",
+      "vehicle": 0,
+      "route": {
+        "161": 4,
+        "282": 1,
+        "431": 10,
+        "496": 9,
+        "955": 0
+      },
+      "dropped": [
+        5
+      ]
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 1,
+      "route": {
+        "106": 3,
+        "143": 6,
+        "209": 2,
+        "284": 0,
+        "412": 8,
+        "476": 7,
+        "627": 0,
+        "701": 5,
+        "775": 0
+      },
+      "dropped": []
+    }
+  ],
+  "final_routes": {
+    "0": {
+      "route": {
+        "161": 4,
+        "282": 1,
+        "431": 10,
+        "496": 9,
+        "955": 0
+      },
+      "dropped": [
+        5
+      ]
+    },
+    "1": {
+      "route": {
+        "106": 3,
+        "143": 6,
+        "209": 2,
+        "284": 0,
+        "412": 8,
+        "476": 7,
+        "627": 0,
+        "701": 5,
+        "775": 0
+      },
+      "dropped": []
+    }
+  }
+}

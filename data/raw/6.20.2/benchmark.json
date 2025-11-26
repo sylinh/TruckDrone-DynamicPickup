@@ -1,0 +1,67 @@
+{
+  "type": "jsonl_log",
+  "summary": {
+    "heuristic": {
+      "name": "C+C",
+      "makespan": 2571.3206,
+      "served": 3,
+      "fitness": 0.48790273
+    },
+    "gp_best": {
+      "gen": 1,
+      "makespan": 4099.7876,
+      "served": 0,
+      "fitness": 0.06043321,
+      "routing": "TERM2",
+      "sequencing": "max(max(sum(max(TERM0, mul(TERM0, sum(TERM0, TERM2))), min(max(TERM1, TERM3), min(TERM3, TERM1))), TERM2), min(min(min(TERM0, sub(TERM4, TERM3)), TERM2), TERM2))"
+    }
+  },
+  "routes": [
+    {
+      "type": "LASTROUTE",
+      "vehicle": 0,
+      "route": {
+        "1366": 4,
+        "1892": 3,
+        "3459": 2,
+        "4167": 0
+      },
+      "dropped": []
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 1,
+      "route": {
+        "411": 1,
+        "755": 0,
+        "1085": 5,
+        "1415": 0,
+        "1727": 6,
+        "3771": 0
+      },
+      "dropped": []
+    }
+  ],
+  "final_routes": {
+    "0": {
+      "route": {
+        "1366": 4,
+        "1892": 3,
+        "3459": 2,
+        "4167": 0
+      },
+      "dropped": []
+    },
+    "1": {
+      "route": {
+        "411": 1,
+        "755": 0,
+        "1085": 5,
+        "1415": 0,
+        "1727": 6,
+        "3771": 0
+      },
+      "dropped": []
+    }
+  }
+}

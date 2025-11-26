@@ -1,0 +1,38 @@
+# ==== Project3 / Truck-Drone Dynamic GP ====
+
+# Dữ liệu & instance đang dùng
+data_root: data/raw
+instance: "6.5.1" # đổi thành tên thư mục trong data/raw
+
+# Cấu hình phương tiện
+vehicles:
+  trucks: { count: 2, speed: 50.0, capacity: 50 }
+  drones: { count: 0, speed: 70.0, capacity: 10, radius: 5000 }
+
+# Ràng buộc
+constraints:
+  Lw: 360 # 1e6, tuỳ bạn chỉnh
+
+# Hàm mục tiêu
+objective:
+  mode: weighted # hoặc "lexicographic"
+  lambda_w: 0.5 # hệ số cho weighted-sum
+
+  # phần weights chỉ để ghi chú cho dễ hiểu
+  weights:
+    makespan: 0.5 # w1
+    unserved: 0.5 # w2 = 1 - service_ratio
+
+# Tham số GP
+gp:
+  pop_size: 40
+  intermed_size: 20 # bắt buộc phải có vì code dùng
+  generations: 3
+  max_depth: 5
+  rm: 0.25
+  rc: 0.65
+  tournament_k: 3
+  seed: 999
+
+# Log output
+log_dir: runs

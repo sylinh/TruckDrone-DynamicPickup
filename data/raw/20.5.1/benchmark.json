@@ -1,0 +1,137 @@
+{
+  "type": "jsonl_log",
+  "summary": {
+    "heuristic": {
+      "name": "C+C",
+      "makespan": 823.34796,
+      "served": 11,
+      "fitness": 0.57370716
+    },
+    "gp_best": {
+      "gen": 1,
+      "makespan": 777.4876,
+      "served": 4,
+      "fitness": 0.25432318,
+      "routing": "mul(sub(min(div(sum(TERM1, TERM1), div(TERM1, TERM2)), div(mul(TERM1, TERM1), max(TERM3, TERM3))), min(sub(min(TERM3, TERM0), sum(TERM0, TERM4)), min(min(TERM1, TERM3), div(TERM3, TERM1)))), sub(mul(div(max(TERM2, TERM3), sub(TERM0, TERM4)), max(mul(TERM3, TERM3), min(TERM4, TERM4))), sub(mul(div(TERM0, TERM2), max(TERM1, TERM4)), min(sum(TERM3, TERM2), min(TERM3, TERM2)))))",
+      "sequencing": "div(min(div(min(min(TERM2, TERM0), sum(TERM4, TERM5)), min(max(TERM0, TERM5), sum(TERM3, TERM0))), div(sub(max(TERM0, TERM1), sub(TERM1, TERM2)), div(mul(TERM5, TERM1), div(TERM1, TERM5)))), min(mul(max(div(TERM0, TERM2), div(TERM4, TERM4)), sub(min(TERM0, TERM0), sum(TERM5, TERM4))), sub(sub(div(TERM4, TERM2), max(TERM2, TERM5)), sum(sum(TERM3, TERM0), min(TERM2, TERM5)))))"
+    }
+  },
+  "routes": [
+    {
+      "type": "LASTROUTE",
+      "vehicle": 0,
+      "route": {
+        "234": 17,
+        "350": 6,
+        "463": 13,
+        "480": 20,
+        "710": 0
+      },
+      "dropped": [
+        10,
+        11,
+        1,
+        18
+      ]
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 1,
+      "route": {
+        "269": 9,
+        "317": 1,
+        "331": 10,
+        "420": 18,
+        "470": 11,
+        "720": 0
+      },
+      "dropped": [
+        20
+      ]
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 2,
+      "route": {
+        "130": 2,
+        "159": 4,
+        "266": 8,
+        "342": 14,
+        "486": 0,
+        "554": 12,
+        "623": 0
+      },
+      "dropped": []
+    },
+    {
+      "type": "LASTROUTE",
+      "vehicle": 3,
+      "route": {
+        "70": 7,
+        "127": 5,
+        "177": 3,
+        "291": 16,
+        "353": 0,
+        "451": 15,
+        "509": 19,
+        "659": 0
+      },
+      "dropped": []
+    }
+  ],
+  "final_routes": {
+    "0": {
+      "route": {
+        "234": 17,
+        "350": 6,
+        "463": 13,
+        "480": 20,
+        "710": 0
+      },
+      "dropped": [
+        10,
+        11,
+        1,
+        18
+      ]
+    },
+    "1": {
+      "route": {
+        "269": 9,
+        "317": 1,
+        "331": 10,
+        "420": 18,
+        "470": 11,
+        "720": 0
+      },
+      "dropped": [
+        20
+      ]
+    },
+    "2": {
+      "route": {
+        "130": 2,
+        "159": 4,
+        "266": 8,
+        "342": 14,
+        "486": 0,
+        "554": 12,
+        "623": 0
+      },
+      "dropped": []
+    },
+    "3": {
+      "route": {
+        "70": 7,
+        "127": 5,
+        "177": 3,
+        "291": 16,
+        "353": 0,
+        "451": 15,
+        "509": 19,
+        "659": 0
+      },
+      "dropped": []
+    }
+  }
+}
