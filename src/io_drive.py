@@ -383,6 +383,58 @@ def import_static_solutions(
         out.append((stem, len(df), False))
     return out
 
+# ---------- static input (per-instance) ----------
+def _load_static_input(cfg: dict) -> Optional[dict]:
+    static_root = Path(cfg.get("static_input_root", "inputs_static"))
+    inst = str(cfg["instance"])
+    path = static_root / f"{inst}.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _apply_static_input_to_cfg(cfg: dict, static_obj: dict):
+    def _pick_depot(customers):
+        if not customers:
+            return None
+        for c in customers:
+            if c.get("index") == 0:
+                return c
+        return customers[0]
+
+    custs = static_obj.get("customers") or []
+    depot = _pick_depot(custs)
+    if depot:
+        cfg["depot"] = [float(depot.get("x", 0.0)), float(depot.get("y", 0.0))]
+
+    veh = cfg.setdefault("vehicles", {})
+    truck_info = static_obj.get("truck") or {}
+    truck_count = static_obj.get("trucks_count")
+    truck_speed = truck_info.get("V_max (m/s)") or truck_info.get("speed")
+    truck_cap = truck_info.get("M_t (kg)") or truck_info.get("capacity")
+    if truck_count is None or truck_speed is None or truck_cap is None:
+        raise ValueError(f"Thieu thong tin truck trong static input cho instance {cfg['instance']}")
+    veh["trucks"] = {
+        "count": int(truck_count),
+        "speed": float(truck_speed),
+        "capacity": float(truck_cap),
+    }
+
+    drone_info = static_obj.get("drone") or {}
+    drone_data = drone_info.get("_data", {}) if isinstance(drone_info, dict) else {}
+    drone_count = static_obj.get("drones_count", 0)
+    drone_speed = drone_data.get("V_max (m/s)") or drone_info.get("V_max (m/s)")
+    drone_cap = drone_data.get("capacity [kg]") or drone_info.get("capacity")
+    drone_radius = drone_info.get("radius") if isinstance(drone_info, dict) else None
+
+    veh["drones"] = {
+        "count": int(drone_count),
+        "speed": float(drone_speed) if drone_speed is not None else 0.0,
+        "capacity": float(drone_cap) if drone_cap is not None else 0.0,
+    }
+    if drone_radius is not None:
+        veh["drones"]["radius"] = float(drone_radius)
+
 # ---------- loader cho simulator ----------
 def load_instance(cfg):
     root = Path(cfg["data_root"]); inst_dir = root / cfg["instance"]
@@ -408,6 +460,17 @@ def load_instance(cfg):
         br = inst_dir / "benchmark.raw.jsonc"
         if br.exists():
             bench = _load_json_relaxed(br)
+
+    # Ap static input (vehicles/depot) neu co, de khong phai cau hinh chung trong config.yaml
+    static_obj = _load_static_input(cfg)
+    if static_obj:
+        _apply_static_input_to_cfg(cfg, static_obj)
+    elif "vehicles" not in cfg:
+        raise ValueError(f"Thieu 'vehicles' trong cfg va khong tim thay static input cho {cfg['instance']}")
+
+    # horizon mac dinh: lay max l_i neu chua thiet lap
+    if "horizon" not in cfg:
+        cfg["horizon"] = float(req["l_i"].max()) if len(req) else 1e9
     return req, bench
 
 # ---------- main ----------

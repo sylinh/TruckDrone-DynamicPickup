@@ -1,0 +1,9 @@
+{
+  "name": "static_inputs_all",
+  "customers_count": null,
+  "trucks_count": null,
+  "drones_count": null,
+  "customers": [],
+  "truck": null,
+  "drone": null
+}

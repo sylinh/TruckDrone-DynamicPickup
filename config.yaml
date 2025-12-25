@@ -1,38 +1,36 @@
-# ==== Project3 / Truck-Drone Dynamic GP ====
+﻿data_root: data/raw
+static_input_root: inputs_static
+instance: "6.5.1"
 
-# Dữ liệu & instance đang dùng
-data_root: data/raw
-instance: "6.5.1" # đổi thành tên thư mục trong data/raw
-
-# Cấu hình phương tiện
-vehicles:
-  trucks: { count: 2, speed: 50.0, capacity: 50 }
-  drones: { count: 0, speed: 70.0, capacity: 10, radius: 5000 }
-
-# Ràng buộc
 constraints:
-  Lw: 360 # 1e6, tuỳ bạn chỉnh
+  Lw: 3600
 
-# Hàm mục tiêu
 objective:
-  mode: weighted # hoặc "lexicographic"
-  lambda_w: 0.5 # hệ số cho weighted-sum
-
-  # phần weights chỉ để ghi chú cho dễ hiểu
+  mode: weighted
+  lambda_w: 0.02
+  drop_penalty: 50.0
   weights:
-    makespan: 0.5 # w1
-    unserved: 0.5 # w2 = 1 - service_ratio
+    makespan: 0.5
+    unserved: 0.5
 
-# Tham số GP
 gp:
-  pop_size: 40
-  intermed_size: 20 # bắt buộc phải có vì code dùng
-  generations: 3
+  pop_size: 120
+  intermed_size: 20
+  generations: 20
   max_depth: 5
-  rm: 0.25
-  rc: 0.65
+  rm: 0.3
+  rc: 0.6
   tournament_k: 3
-  seed: 999
+  seed: 42
+  seed_ratio: 0.2
+  seed_pairs:
+    - ["min(TERM0, TERM4)", "min(TERM0, TERM4)"] # near + nearest-next
+    - ["min(TERM0, TERM6)", "TERM6"] # near + due sooner
+    - ["min(TERM0, TERM5)", "min(TERM5, TERM6)"] # near + ready/due
+    - ["min(TERM0, TERM3)", "TERM3"] # near + balance load
+    - ["min(add(TERM0, TERM1), TERM6)", "TERM6"] # near + small demand + due
+    - ["TERM1", "TERM2"] # demand vs rem cap
+    - ["min(TERM1, TERM4)", "TERM3"] # demand small + nearest-next
+    - ["max(TERM1, TERM5)", "min(TERM2, TERM4)"] # prioritize small demand, balance
 
-# Log output
 log_dir: runs

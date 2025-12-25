@@ -1,0 +1,71 @@
+{
+  "name": "6.10.2",
+  "customers_count": 6,
+  "trucks_count": 1,
+  "drones_count": 1,
+  "customers": [
+    {
+      "index": 0,
+      "x": 0.0,
+      "y": 0.0,
+      "demand": 0.0,
+      "dronable": true
+    },
+    {
+      "index": 1,
+      "x": 3714.173638781885,
+      "y": 1281.4403113697058,
+      "demand": 0.13040440227301978,
+      "dronable": true
+    },
+    {
+      "index": 2,
+      "x": -2607.669508059546,
+      "y": 2880.9755320140907,
+      "demand": 1.0147864973860408,
+      "dronable": true
+    },
+    {
+      "index": 3,
+      "x": -7801.962557287281,
+      "y": 6967.076165007338,
+      "demand": 0.6419902321588782,
+      "dronable": true
+    },
+    {
+      "index": 4,
+      "x": -941.2642394609439,
+      "y": 7881.40657583149,
+      "demand": 0.6538357612116562,
+      "dronable": true
+    },
+    {
+      "index": 5,
+      "x": -4581.875773938015,
+      "y": 3031.1498519761976,
+      "demand": 0.5706335791560622,
+      "dronable": true
+    },
+    {
+      "index": 6,
+      "x": -1622.6464497528034,
+      "y": -6063.627865524772,
+      "demand": 0.3550698571572261,
+      "dronable": true
+    }
+  ],
+  "truck": {
+    "V_max (m/s)": 15.6464,
+    "M_t (kg)": 400.0
+  },
+  "drone": {
+    "config": "Endurance",
+    "_data": {
+      "speed_type": "high",
+      "range_type": "high",
+      "capacity [kg]": 2.27,
+      "FixedTime (s)": 700.0,
+      "V_max (m/s)": 31.2928
+    }
+  }
+}

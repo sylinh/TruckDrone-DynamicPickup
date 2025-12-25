@@ -30,7 +30,6 @@ def _get(obj: Any, *names: str, default=None):
                 return getattr(obj, n)
     return default
 
-
 def _pos_xy(obj: Any) -> Tuple[float, float]:
     """Trả (x,y) từ obj: chấp nhận (x,y) | {'x','y'} | {'pos':(x,y)}."""
     p = _get(obj, "pos", default=None)
@@ -41,7 +40,6 @@ def _pos_xy(obj: Any) -> Tuple[float, float]:
     if x is not None and y is not None:
         return float(x), float(y)
     return 0.0, 0.0
-
 
 def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) -> List[float]:
     """

@@ -64,11 +64,35 @@ def evaluate_ind(cfg, ind_r, ind_s, req_df, T_ref):
     pol = GPPolicy(Rf, Sf)
     stats, _ = run_episode(cfg, pol, req_df)
     lam = float(cfg["objective"]["lambda_w"])
-    F = lam * (stats["makespan"] / max(1e-9, T_ref)) + (1.0 - stats["served"] / stats["total"])
+    drop_pen = float(cfg["objective"].get("drop_penalty", 1.0))
+    F = lam * (stats["makespan"] / max(1e-9, T_ref)) + drop_pen * (1.0 - stats["served"] / stats["total"])
     return F, stats
 
 
 def train_gphh(cfg):
+    def _build_seed_pairs(tb, max_count):
+        seeds_cfg = cfg.get("gp", {}).get("seed_pairs") or [
+            ("min(TERM0, TERM4)", "min(TERM0, TERM4)"),             # gần + nearest-next
+            ("min(TERM0, TERM6)", "TERM6"),                         # gần + hạn chót
+            ("min(TERM0, TERM5)", "min(TERM5, TERM6)"),             # gần + ready/due
+            ("min(TERM0, TERM3)", "TERM3"),                         # gần + cân bằng tải
+            ("min(add(TERM0, TERM1), TERM6)", "TERM6"),             # gần + demand nhỏ + due
+            ("TERM1", "TERM2"),                                     # demand vs rem cap
+            ("min(TERM1, TERM4)", "TERM3"),                         # demand nhỏ + nearest-next
+            ("max(TERM1, TERM5)", "min(TERM2, TERM4)"),             # ưu tiên demand nhỏ, balancing
+        ]
+        out = []
+        for r_expr, s_expr in seeds_cfg:
+            try:
+                ar = gp.PrimitiveTree.from_string(r_expr, tb.pset)
+                as_ = gp.PrimitiveTree.from_string(s_expr, tb.pset)
+                out.append((ar, as_))
+            except Exception:
+                continue
+            if len(out) >= max_count:
+                break
+        return out
+
     # load data & baseline T_ref
     req_df, _ = load_instance(cfg)
     base_pol = build_baseline()
@@ -82,7 +106,12 @@ def train_gphh(cfg):
     k = cfg["gp"]["tournament_k"]
 
     # each individual is a tuple (routing_tree, sequencing_tree)
-    pop = [(tb.individual(), tb.individual()) for _ in range(pop_size)]
+    seed_ratio = float(cfg["gp"].get("seed_ratio", 0.15))
+    seed_cap = min(pop_size, max(0, int(pop_size * seed_ratio)))
+    seeds = _build_seed_pairs(tb, seed_cap) if seed_cap > 0 else []
+    pop = list(seeds)
+    while len(pop) < pop_size:
+        pop.append((tb.individual(), tb.individual()))
 
     def fitness(pair):
         indR, indS = pair

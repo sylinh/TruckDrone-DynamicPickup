@@ -48,7 +48,7 @@ def run_episode(cfg, policy, req_df):
     next_idx = 0
     t = 0.0
 
-    def is_feasible(k, r):
+    def is_feasible(k, r, load_override=None, t_now=None, pos_override=None):
         V = vehs[k]
         demand = float(r["demand"])
         if demand > V["capacity"]:
@@ -56,9 +56,16 @@ def run_episode(cfg, policy, req_df):
         if V["type"] == "drone" and V.get("radius", None) is not None:
             if dist(depot, (r["x"], r["y"])) > V["radius"]:
                 return False
-        # dự báo tới khách: từ depot sau khi xe rảnh
-        eta = max(t, V["free_at"]) + dist(depot, (r["x"], r["y"])) / max(V["speed"], 1e-9)
-        if eta > float(r["l_i"]):
+        load_now = V["load"] if load_override is None else load_override
+        if (load_now + demand) > V["capacity"]:
+            return False
+        # check time window feasibility from current pos/time
+        t_ref = t if t_now is None else t_now
+        pos_ref = V["pos"] if pos_override is None else pos_override
+        travel_to = dist(pos_ref, (r["x"], r["y"])) / max(V["speed"], 1e-9)
+        arrive = t_ref + travel_to
+        start = max(arrive, r["e_i"])
+        if start > r["l_i"]:
             return False
         return True
 
@@ -100,52 +107,94 @@ def run_episode(cfg, policy, req_df):
                 vehs[choice]["queue"].append(next_idx)
             next_idx += 1
 
-        # 2) xe rảnh chọn khách tiếp theo
+        # 2) xe rảnh chọn khách tiếp theo, có thể phục vụ nhiều khách trên một hành trình trước khi về depot
         for k, V in enumerate(vehs):
             if V["free_at"] > t:
                 continue  # đang di chuyển
             if not V.get("queue"):
                 continue
-            state_common["time"] = t
-            nxt = policy.select_next(state_common, k)
-            if nxt is None:
-                # không còn khách khả thi -> drop hết queue để tránh kẹt
-                for i in V.get("queue", []):
-                    dropped.add(i)
-                V["queue"] = []
-                continue
-            # thử phục vụ
-            r = req_df.loc[nxt]
-            if nxt in served or nxt in dropped:
-                V["queue"] = [x for x in V["queue"] if x != nxt]
-                continue
-            # tính thời gian di chuyển depot -> req -> depot (đơn giản)
-            travel_to = dist(depot, (r["x"], r["y"])) / max(V["speed"], 1e-9)
-            arrive_cust = max(t, V["free_at"]) + travel_to
-            if arrive_cust < r["e_i"]:
-                wait = r["e_i"] - arrive_cust
-            else:
-                wait = 0.0
-            start = arrive_cust + wait
-            if start > r["l_i"]:
-                dropped.add(nxt)
-                V["queue"] = [x for x in V["queue"] if x != nxt]
-                continue
+            t_v = max(t, V["free_at"])
+            pos_v = V["pos"]
+            load_v = V["load"]
+            tour = []  # (req_idx, pick_time)
+            while V.get("queue"):
+                state_common["time"] = t_v
+                nxt = policy.select_next(state_common, k)
+                if nxt is None:
+                    # drop hết hạn, giữ lại khả thi
+                    keep = []
+                    for i in V.get("queue", []):
+                        r = req_df.loc[i]
+                        if t_v > r["l_i"]:
+                            dropped.add(i)
+                        else:
+                            keep.append(i)
+                    V["queue"] = keep
+                    break
+                r = req_df.loc[nxt]
+                if nxt in served or nxt in dropped:
+                    V["queue"] = [x for x in V["queue"] if x != nxt]
+                    continue
+                if r["t_arrive"] > t_v:
+                    # chưa đến thời điểm request xuất hiện
+                    break
+                if not is_feasible(k, r, load_override=load_v, t_now=t_v, pos_override=pos_v):
+                    V["queue"] = [x for x in V["queue"] if x != nxt]
+                    continue
 
-            finish = start + dist((r["x"], r["y"]), depot) / max(V["speed"], 1e-9)
-            if (finish - float(r["t_arrive"])) > Lw:
-                dropped.add(nxt)
-                V["queue"] = [x for x in V["queue"] if x != nxt]
-                continue
+                # thời gian di chuyển từ vị trí hiện tại tới khách
+                travel_to = dist(pos_v, (r["x"], r["y"])) / max(V["speed"], 1e-9)
+                arrive_cust = t_v + travel_to
+                start = max(arrive_cust, r["e_i"])
+                if start > r["l_i"]:
+                    dropped.add(nxt)
+                    V["queue"] = [x for x in V["queue"] if x != nxt]
+                    continue
 
-            # serve
+                # kiểm tra Lw cho toàn tour nếu thêm khách này (tính thời gian về depot)
+                t_pick_new = start
+                t_depot_new = t_pick_new + dist((r["x"], r["y"]), depot) / max(V["speed"], 1e-9)
+                feasible_Lw = True
+                for _, t_pick_h in tour:
+                    if (t_depot_new - t_pick_h) > Lw:
+                        feasible_Lw = False
+                        break
+                if (t_depot_new - t_pick_new) > Lw:
+                    feasible_Lw = False
+                if not feasible_Lw:
+                    V["queue"] = [x for x in V["queue"] if x != nxt]
+                    continue
+
+                # serve khách, ở lại vị trí khách
+                t_v = start  # service time ~0
+                pos_v = (r["x"], r["y"])
+                load_v += float(r["demand"])
+                tour.append((nxt, float(t_pick_new)))
+                served.add(nxt)
+                V["queue"] = [x for x in V["queue"] if x != nxt]
+                timeline.append((k, int(nxt), float(start), float(start)))
+
+            # về depot khi không còn queue hoặc không chọn được nữa
+            travel_back = dist(pos_v, depot) / max(V["speed"], 1e-9)
+            V["free_at"] = t_v + travel_back
             V["pos"] = depot
-            V["free_at"] = finish
-            served.add(nxt)
-            V["queue"] = [x for x in V["queue"] if x != nxt]
-            timeline.append((k, int(nxt), float(start), float(finish)))
+            V["load"] = 0.0
+
+            # drop các khách còn lại nếu đã quá hạn
+            keep = []
+            for i in V.get("queue", []):
+                r = req_df.loc[i]
+                if V["free_at"] > r["l_i"]:
+                    dropped.add(i)
+                else:
+                    keep.append(i)
+            V["queue"] = keep
+
+    # drop tất cả request còn lại chưa phục vụ/ chưa drop (không còn sự kiện nào diễn ra)
+    for i in range(N):
+        if i not in served and i not in dropped:
+            dropped.add(i)
 
     makespan = max([v["free_at"] for v in vehs] + [0.0])
-    stats = {"makespan": float(makespan), "served": len(served), "total": N,
-             "dropped": len(dropped)}
+    stats = {"makespan": float(makespan), "served": len(served), "total": N, "dropped": len(dropped)}
     return stats, timeline
