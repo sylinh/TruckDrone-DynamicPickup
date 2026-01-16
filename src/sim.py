@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from math import hypot
 from copy import deepcopy
+from collections import Counter
 
 
 def dist(a, b): return float(hypot(a[0]-b[0], a[1]-b[1]))
@@ -35,7 +36,8 @@ def _norm_constants(req_df, cfg, depot):
 
 def run_episode(cfg, policy, req_df):
     """Event-driven mô phỏng theo mã giả: request mới -> route R; xe rảnh -> sequence S."""
-    req_df = req_df.reset_index(drop=True)
+    # xử lý theo thứ tự thời gian xuất hiện để tránh drop sai do index không sắp xếp
+    req_df = req_df.sort_values("t_arrive").reset_index(drop=True)
     N = len(req_df)
     depot = tuple(cfg.get("depot", [0.0,0.0]))
     vehs = _mk_vehicles(cfg, depot)
@@ -44,9 +46,44 @@ def run_episode(cfg, policy, req_df):
     Lw = float(cfg.get("constraints", {}).get("Lw", 1e9))
 
     served, dropped = set(), set()
+    pending_pool = set()
     timeline = []
     next_idx = 0
     t = 0.0
+    drop_reasons = []
+
+    def log_drop(idx, reason, t_now=None, veh_idx=None, detail=None):
+        rec = {"req_idx": int(idx), "reason": str(reason), "time": float(t if t_now is None else t_now)}
+        if veh_idx is not None:
+            rec["vehicle"] = int(veh_idx)
+        if detail is not None:
+            rec["detail"] = detail
+        drop_reasons.append(rec)
+
+    def explain_infeasible(k, r, t_now, pos_override=None, load_override=None):
+        V = vehs[k]
+        demand = float(r["demand"])
+        cap = V["capacity"]
+        if demand > cap:
+            return "over_capacity"
+        if V["type"] == "drone" and V.get("radius", None) is not None:
+            if dist(depot, (r["x"], r["y"])) > V["radius"]:
+                return "out_of_radius"
+        load_now = V["load"] if load_override is None else load_override
+        if (load_now + demand) > cap:
+            return "over_load"
+        t_ref = max(t_now, V["free_at"])
+        pos_ref = V["pos"] if pos_override is None else pos_override
+        travel_to = dist(pos_ref, (r["x"], r["y"])) / max(V["speed"], 1e-9)
+        arrive = t_ref + travel_to
+        start = max(arrive, r["e_i"])
+        if start > r["l_i"]:
+            return "miss_deadline"
+        # coarse Lw check: giả định về depot ngay sau khi pickup
+        t_depot = start + dist((r["x"], r["y"]), depot) / max(V["speed"], 1e-9)
+        if (t_depot - start) > Lw:
+            return "violates_Lw"
+        return None
 
     def is_feasible(k, r, load_override=None, t_now=None, pos_override=None):
         V = vehs[k]
@@ -102,10 +139,50 @@ def run_episode(cfg, policy, req_df):
             state_common["time"] = t
             choice = policy.route_request(state_common, next_idx)
             if choice is None:
-                dropped.add(next_idx)
+                reasons = []
+                for k, _ in enumerate(vehs):
+                    reasons.append({"vehicle": k, "reason": explain_infeasible(k, r, t_now=t) or "potential_future"})
+                # nếu còn khả năng trong tương lai thì giữ pending, ngược lại drop ngay
+                if any(rn["reason"] == "potential_future" for rn in reasons):
+                    pending_pool.add(next_idx)
+                else:
+                    dropped.add(next_idx)
+                    log_drop(next_idx, "no_vehicle_feasible_at_arrival", t_now=t, detail={"per_vehicle": reasons})
             else:
-                vehs[choice]["queue"].append(next_idx)
+                # kiểm tra sơ bộ deadline nếu xếp vào queue của vehicle được chọn
+                Vc = vehs[choice]
+                t_ref = max(t, Vc["free_at"])
+                travel_to = dist(Vc["pos"], (r["x"], r["y"])) / max(Vc["speed"], 1e-9)
+                start_est = max(t_ref + travel_to, r["e_i"])
+                if start_est > r["l_i"]:
+                    dropped.add(next_idx)
+                    log_drop(next_idx, "cannot_fit_queue_deadline", t_now=t, veh_idx=choice, detail={"start_est": start_est, "l_i": r["l_i"]})
+                else:
+                    vehs[choice]["queue"].append(next_idx)
             next_idx += 1
+
+        # 1b) re-check pending pool khi có sự kiện (xe rảnh/ request mới)
+        state_common["time"] = t
+        for idx in sorted(list(pending_pool), key=lambda j: req_df.loc[j, "l_i"]):
+            r = req_df.loc[idx]
+            if t > r["l_i"]:
+                pending_pool.discard(idx)
+                dropped.add(idx)
+                log_drop(idx, "expired_in_pending", t_now=t)
+                continue
+            choice = policy.route_request(state_common, idx)
+            if choice is not None and is_feasible(choice, r, t_now=t):
+                vehs[choice]["queue"].append(idx)
+                pending_pool.discard(idx)
+                continue
+            # check nếu chắc chắn không thể trong tương lai
+            reasons = []
+            for k, _ in enumerate(vehs):
+                reasons.append({"vehicle": k, "reason": explain_infeasible(k, r, t_now=t) or "potential_future"})
+            if all(rn["reason"] != "potential_future" for rn in reasons):
+                pending_pool.discard(idx)
+                dropped.add(idx)
+                log_drop(idx, "pending_infeasible", t_now=t, detail={"per_vehicle": reasons})
 
         # 2) xe rảnh chọn khách tiếp theo, có thể phục vụ nhiều khách trên một hành trình trước khi về depot
         for k, V in enumerate(vehs):
@@ -127,6 +204,7 @@ def run_episode(cfg, policy, req_df):
                         r = req_df.loc[i]
                         if t_v > r["l_i"]:
                             dropped.add(i)
+                            log_drop(i, "expired_waiting_in_queue", t_now=t_v, veh_idx=k)
                         else:
                             keep.append(i)
                     V["queue"] = keep
@@ -148,6 +226,7 @@ def run_episode(cfg, policy, req_df):
                 start = max(arrive_cust, r["e_i"])
                 if start > r["l_i"]:
                     dropped.add(nxt)
+                    log_drop(nxt, "cannot_reach_before_due", t_now=t_v, veh_idx=k)
                     V["queue"] = [x for x in V["queue"] if x != nxt]
                     continue
 
@@ -186,6 +265,7 @@ def run_episode(cfg, policy, req_df):
                 r = req_df.loc[i]
                 if V["free_at"] > r["l_i"]:
                     dropped.add(i)
+                    log_drop(i, "expired_in_queue_after_tour", t_now=V["free_at"], veh_idx=k)
                 else:
                     keep.append(i)
             V["queue"] = keep
@@ -194,7 +274,15 @@ def run_episode(cfg, policy, req_df):
     for i in range(N):
         if i not in served and i not in dropped:
             dropped.add(i)
+            log_drop(i, "unserved_end_of_sim", t_now=t)
 
     makespan = max([v["free_at"] for v in vehs] + [0.0])
-    stats = {"makespan": float(makespan), "served": len(served), "total": N, "dropped": len(dropped)}
+    stats = {
+        "makespan": float(makespan),
+        "served": len(served),
+        "total": N,
+        "dropped": len(dropped),
+        "drop_reasons": drop_reasons,
+        "drop_breakdown": dict(Counter([r["reason"] for r in drop_reasons])),
+    }
     return stats, timeline

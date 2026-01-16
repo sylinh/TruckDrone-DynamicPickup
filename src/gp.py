@@ -63,9 +63,15 @@ def evaluate_ind(cfg, ind_r, ind_s, req_df, T_ref):
     Sf = compile_ind(toolbox, ind_s)
     pol = GPPolicy(Rf, Sf)
     stats, _ = run_episode(cfg, pol, req_df)
-    lam = float(cfg["objective"]["lambda_w"])
-    drop_pen = float(cfg["objective"].get("drop_penalty", 1.0))
-    F = lam * (stats["makespan"] / max(1e-9, T_ref)) + drop_pen * (1.0 - stats["served"] / stats["total"])
+    # ưu tiên tối đa served nếu bật cờ served_first
+    if cfg.get("objective", {}).get("served_first", False):
+        # tối thiểu hóa số khách chưa phục vụ, tie-break bằng makespan
+        unserved = max(0, stats["total"] - stats["served"])
+        F = unserved * 1e6 + (stats["makespan"] / max(1e-9, T_ref))
+    else:
+        lam = float(cfg["objective"]["lambda_w"])
+        drop_pen = float(cfg["objective"].get("drop_penalty", 1.0))
+        F = lam * (stats["makespan"] / max(1e-9, T_ref)) + drop_pen * (1.0 - stats["served"] / stats["total"])
     return F, stats
 
 
