@@ -295,6 +295,11 @@ def main():
         (batch_dir / f"{base}_latest.json").write_text(json_txt, encoding="utf-8")
 
         print(f"Summary saved:\n - {csv_path}\n - {json_path}")
+        # chỉ sinh bảng compare khi chạy "all" (instances mặc định)
+        gen_compare = (len(args.instances) == 1 and str(args.instances[0]).lower() == "all")
+        if not gen_compare:
+            return
+
         # compare folder (served/total/dropped vs benchmark), clean each run
         compare_dir = Path(cfg.get("results_dir","results")) / "_compare"
         shutil.rmtree(compare_dir, ignore_errors=True)
@@ -311,6 +316,24 @@ def main():
         cmp_json.write_text(cmp_txt, encoding="utf-8")
         (compare_dir / f"{cmp_base}_latest.csv").write_text(cmp_csv.read_text(encoding="utf-8"), encoding="utf-8")
         (compare_dir / f"{cmp_base}_latest.json").write_text(cmp_txt, encoding="utf-8")
+        # lưu lại cấu hình dùng cho compare
+        cfg_snap = {
+            "config": cfg,
+            "args": {
+                "run_mode": args.run_mode,
+                "instances": args.instances,
+                "summary_only": args.summary_only,
+                "clean_results": getattr(args, "clean_results", False),
+                "model": getattr(args, "model", None),
+                "ml_log": getattr(args, "ml_log", None),
+                "out": getattr(args, "out", None),
+            },
+        }
+        cfg_path = compare_dir / f"{cmp_base}_config_{ts}.json"
+        cfg_latest = compare_dir / f"{cmp_base}_config_latest.json"
+        cfg_text = json.dumps(cfg_snap, ensure_ascii=False, indent=2)
+        cfg_path.write_text(cfg_text, encoding="utf-8")
+        cfg_latest.write_text(cfg_text, encoding="utf-8")
         print(f"Compare saved:\n - {cmp_csv}\n - {cmp_json}")
         return
 
