@@ -1,0 +1,93 @@
+{
+  "config": {
+    "data_root": "data/raw",
+    "static_input_root": "inputs_static",
+    "instance": "100.20.1",
+    "constraints": {
+      "Lw": 3600
+    },
+    "objective": {
+      "mode": "weighted",
+      "lambda_w": 0.05,
+      "drop_penalty": 30.0,
+      "weights": {
+        "makespan": 0.5,
+        "unserved": 0.5
+      }
+    },
+    "gp": {
+      "pop_size": 180,
+      "intermed_size": 50,
+      "generations": 30,
+      "max_depth": 6,
+      "rm": 0.3,
+      "rc": 0.6,
+      "tournament_k": 4,
+      "seed": 42,
+      "seed_ratio": 0.5,
+      "seed_pairs": [
+        [
+          "min(TERM0, TERM4)",
+          "min(TERM0, TERM4)"
+        ],
+        [
+          "min(TERM0, TERM6)",
+          "TERM6"
+        ],
+        [
+          "min(TERM0, TERM5)",
+          "min(TERM5, TERM6)"
+        ],
+        [
+          "min(TERM0, TERM3)",
+          "TERM3"
+        ],
+        [
+          "min(add(TERM0, TERM1), TERM6)",
+          "TERM6"
+        ],
+        [
+          "TERM1",
+          "TERM2"
+        ],
+        [
+          "min(TERM1, TERM4)",
+          "TERM3"
+        ],
+        [
+          "max(TERM1, TERM5)",
+          "min(TERM2, TERM4)"
+        ],
+        [
+          "min(TERM0, TERM6)",
+          "min(TERM4, TERM6)"
+        ],
+        [
+          "min(add(TERM0, TERM7), TERM6)",
+          "min(TERM5, TERM6)"
+        ],
+        [
+          "min(TERM1, TERM3)",
+          "min(TERM1, TERM3)"
+        ],
+        [
+          "max(TERM0, TERM2)",
+          "min(TERM2, TERM4)"
+        ]
+      ]
+    },
+    "log_dir": "runs",
+    "results_dir": "results"
+  },
+  "args": {
+    "run_mode": "gp",
+    "instances": [
+      "all"
+    ],
+    "summary_only": false,
+    "clean_results": true,
+    "model": null,
+    "ml_log": null,
+    "out": null
+  }
+}
