@@ -1,0 +1,150 @@
+{
+  "mode": "gp",
+  "count": 12,
+  "rows": [
+    {
+      "instance": "6.5.1",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 6,
+      "dropped_benchmark": 0,
+      "makespan_ours": 730.0758763104355,
+      "makespan_benchmark": 718.0927,
+      "makespan_impr_%": -1.6687506098356812,
+      "service_ratio_impr_%": 0.0
+    },
+    {
+      "instance": "6.5.2",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 6,
+      "dropped_benchmark": 0,
+      "makespan_ours": 586.3521220659368,
+      "makespan_benchmark": 550.7224,
+      "makespan_impr_%": -6.469633714905511,
+      "service_ratio_impr_%": 0.0
+    },
+    {
+      "instance": "6.5.3",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 6,
+      "dropped_benchmark": 0,
+      "makespan_ours": 919.982382930512,
+      "makespan_benchmark": 873.12744,
+      "makespan_impr_%": -5.366334945390336,
+      "service_ratio_impr_%": 0.0
+    },
+    {
+      "instance": "6.5.4",
+      "served_ours": 5,
+      "total": 6,
+      "dropped_ours": 1,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 661.4730859712208,
+      "makespan_benchmark": 653.4117,
+      "makespan_impr_%": -1.2337376222710474,
+      "service_ratio_impr_%": 0.0
+    },
+    {
+      "instance": "6.10.1",
+      "served_ours": 4,
+      "total": 6,
+      "dropped_ours": 2,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 1124.3649333630292,
+      "makespan_benchmark": 1078.7477,
+      "makespan_impr_%": -4.228721262907842,
+      "service_ratio_impr_%": -20.000000000000007
+    },
+    {
+      "instance": "6.10.2",
+      "served_ours": 5,
+      "total": 6,
+      "dropped_ours": 1,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 1304.5888620336048,
+      "makespan_benchmark": 1246.0215,
+      "makespan_impr_%": -4.700349234231086,
+      "service_ratio_impr_%": 0.0
+    },
+    {
+      "instance": "6.10.3",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 1389.269949552026,
+      "makespan_benchmark": 1295.786,
+      "makespan_impr_%": -7.214458988754774,
+      "service_ratio_impr_%": 19.999999999999996
+    },
+    {
+      "instance": "6.10.4",
+      "served_ours": 5,
+      "total": 6,
+      "dropped_ours": 1,
+      "served_benchmark": 6,
+      "dropped_benchmark": 0,
+      "makespan_ours": 997.8751026714797,
+      "makespan_benchmark": 1273.3441,
+      "makespan_impr_%": 21.633507967604384,
+      "service_ratio_impr_%": -16.666666666666664
+    },
+    {
+      "instance": "6.20.1",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 3887.984855844792,
+      "makespan_benchmark": 3931.9158,
+      "makespan_impr_%": 1.1172910710653616,
+      "service_ratio_impr_%": 19.999999999999996
+    },
+    {
+      "instance": "6.20.2",
+      "served_ours": 5,
+      "total": 6,
+      "dropped_ours": 1,
+      "served_benchmark": 6,
+      "dropped_benchmark": 0,
+      "makespan_ours": 4012.356684848999,
+      "makespan_benchmark": 4099.7876,
+      "makespan_impr_%": 2.132571822769565,
+      "service_ratio_impr_%": -16.666666666666664
+    },
+    {
+      "instance": "6.20.3",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 6053.214544913806,
+      "makespan_benchmark": 5802.0347,
+      "makespan_impr_%": -4.329168264260914,
+      "service_ratio_impr_%": 19.999999999999996
+    },
+    {
+      "instance": "6.20.4",
+      "served_ours": 6,
+      "total": 6,
+      "dropped_ours": 0,
+      "served_benchmark": 5,
+      "dropped_benchmark": 1,
+      "makespan_ours": 5994.786067461171,
+      "makespan_benchmark": 5985.211,
+      "makespan_impr_%": -0.15997877871257796,
+      "service_ratio_impr_%": 19.999999999999996
+    }
+  ]
+}

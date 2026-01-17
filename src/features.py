@@ -15,6 +15,9 @@ FEATURE_ORDER: List[str] = [
     "waiting_time",      # 7: max(0, t - t_arrive) / H
     "drone_ok",          # 8: 1 if req can be served by drone
     "is_drone",          # 9: 1 if vehicle is drone
+    "ins_delta_end",     # 10: delta end-time of best insertion / H
+    "ins_slack_min",     # 11: min slack along best insertion / H
+    "ins_feasible_frac", # 12: feasible positions / (|queue|+1)
 ]
 
 def _get(obj: Any, *names: str, default=None):
@@ -68,6 +71,10 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
     rem_cap = max(0.0, cap - load)
     is_drone = 1.0 if str(_get(vehicle, "type", default="truck")).lower() == "drone" else 0.0
     vx, vy = _pos_xy(vehicle)
+    queue_len = 0
+    q_obj = _get(vehicle, "queue", default=[])
+    if isinstance(q_obj, (list, tuple)):
+        queue_len = len(q_obj)
 
     # request params
     rx, ry = _pos_xy(req)
@@ -99,6 +106,17 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
     time_to_due = max(0.0, l_i - now) / H
     waiting_time = max(0.0, now - t_arr) / H
 
+    # insertion-derived metrics (only set when simulator precomputes them)
+    veh_idx = _get(sim, "veh_idx", default=None)
+    ins_info = {}
+    if veh_idx is not None and isinstance(sim, dict):
+        ins_info = (sim.get("insertion_info") or {}).get(veh_idx, {}) if isinstance(sim.get("insertion_info"), dict) else {}
+    delta_end_norm = float(ins_info.get("delta_end", 0.0)) / H
+    slack_min_norm = float(ins_info.get("slack_min", 0.0)) / H
+    feasible_cnt = float(ins_info.get("feasible_pos_count", 0.0))
+    total_pos = float(ins_info.get("total_pos", queue_len + 1))
+    feasible_frac = feasible_cnt / max(total_pos, 1.0)
+
     vec = [
         float(dist_v_req),
         float(demand_norm),
@@ -110,6 +128,9 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
         float(waiting_time),
         float(drone_ok),
         float(is_drone),
+        float(delta_end_norm),
+        float(slack_min_norm),
+        float(feasible_frac),
     ]
     return vec
 

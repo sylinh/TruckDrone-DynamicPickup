@@ -30,6 +30,33 @@ def _bench_best(bench):
     summ = bench.get("summary") or {}
     return summ.get("gp_best") or summ.get("heuristic") or None
 
+def _bench_counts(bench: dict | None, total: int | None = None) -> dict:
+    """Derive served/dropped/service_ratio from benchmark routes when summary lacks them."""
+    if not isinstance(bench, dict):
+        return {}
+    drop_ct = None
+    fr = bench.get("final_routes") or {}
+    if isinstance(fr, dict) and fr:
+        drops = []
+        for v in fr.values():
+            dr = v.get("dropped") or []
+            if isinstance(dr, list):
+                drops.extend(dr)
+        drop_ct = len(set(drops))
+    tot = total or bench.get("total")
+    served = None
+    if tot is not None and drop_ct is not None:
+        served = max(tot - drop_ct, 0)
+    sr = None
+    if served is not None and tot not in (None, 0):
+        sr = served / tot
+    out = {}
+    if served is not None: out["served"] = served
+    if drop_ct is not None: out["dropped"] = drop_ct
+    if tot is not None: out["total"] = tot
+    if sr is not None: out["service_ratio"] = sr
+    return out
+
 def _service_ratio_from(d):
     if not isinstance(d, dict): return None
     for k in ("service_ratio","served_ratio"):
@@ -112,7 +139,8 @@ def _run_eval_baseline(cfg_base: dict, instance: str, save_each: bool = True):
     req_df, bench = load_instance(cfg)
     pol = build_baseline()
     stats, _ = run_episode(cfg, pol, req_df)
-    bench_best = _bench_best(bench)
+    bench_best = dict(_bench_best(bench) or {})
+    bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
     if save_each:
         outdir = _results_dir(cfg)
@@ -129,7 +157,8 @@ def _run_train_eval_gp(cfg_base: dict, instance: str, save_each: bool = True):
     pair = train_gphh(cfg)
     pol = build_gp_policy_from_pair(cfg, pair)
     stats, _ = run_episode(cfg, pol, req_df)
-    bench_best = _bench_best(bench)
+    bench_best = dict(_bench_best(bench) or {})
+    bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
     if save_each:
         outdir = _results_dir(cfg)
@@ -147,7 +176,8 @@ def _run_eval_ml(cfg_base: dict, instance: str, model_path: str, log_path: str |
     pol = MLPolicy(model_path=model_path, logger=logger, instance=instance)
     stats, _ = run_episode(cfg, pol, req_df)
     if logger: logger.close()
-    bench_best = _bench_best(bench)
+    bench_best = dict(_bench_best(bench) or {})
+    bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
     if save_each:
         outdir = _results_dir(cfg)

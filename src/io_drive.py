@@ -147,10 +147,14 @@ def _normalize_benchmark(obj: Union[dict, list]) -> dict:
     routes: List[dict] = []
     final_routes: dict = {}
 
+    def _sv(x):
+        v = x.get("served")
+        return -1 if v is None else v
+
     def better(a: dict, b: Optional[dict]) -> bool:
         if b is None: return True
-        if a.get("served", -1) != b.get("served", -1):
-            return a.get("served", -1) > b.get("served", -1)
+        if _sv(a) != _sv(b):
+            return _sv(a) > _sv(b)
         fa, fb = a.get("fitness"), b.get("fitness")
         if fa is not None and fb is not None and abs(fa - fb) > 1e-12:
             return fa < fb
@@ -163,7 +167,9 @@ def _normalize_benchmark(obj: Union[dict, list]) -> dict:
             heur = {
                 "name": r.get("name"),
                 "makespan": float(res[0]) if res[0] is not None else None,
-                "served": int(res[1]) if res[1] is not None else None,
+                # In WTW3 logs the 2nd field is feasibility/penalty, not "served".
+                "served": None,
+                "penalty": float(res[1]) if res[1] is not None else None,
                 "fitness": r.get("fitness"),
             }
         elif typ == "GP" and tag in ("new_gen","full_result"):
@@ -171,7 +177,8 @@ def _normalize_benchmark(obj: Union[dict, list]) -> dict:
             cand = {
                 "gen": r.get("gen"),
                 "makespan": float(res[0]) if res[0] is not None else None,
-                "served": int(res[1]) if res[1] is not None else None,
+                "served": None,  # second slot is a penalty/feasible flag in WTW3 logs
+                "penalty": float(res[1]) if res[1] is not None else None,
                 "fitness": r.get("fitness"),
                 "routing": r.get("routing"),
                 "sequencing": r.get("sequencing"),

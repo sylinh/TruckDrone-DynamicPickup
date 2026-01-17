@@ -4,16 +4,18 @@
     "heuristic": {
       "name": "C+C",
       "makespan": 2627.292,
-      "served": 33,
+      "served": null,
+      "penalty": 33.0,
       "fitness": 0.6301295
     },
     "gp_best": {
-      "gen": 1,
-      "makespan": 4340.705,
-      "served": 11,
-      "fitness": 0.2576918,
-      "routing": "max(min(TERM3, TERM1), min(TERM0, TERM1))",
-      "sequencing": "TERM5"
+      "gen": 58,
+      "makespan": 4283.049,
+      "served": null,
+      "penalty": 0.0,
+      "fitness": 0.058898922,
+      "routing": "sub(sub(div(TERM3, mul(mul(TERM1, TERM1), sub(mul(TERM3, TERM3), TERM3))), TERM2), div(sum(TERM3, TERM3), min(TERM4, mul(min(TERM1, mul(TERM0, TERM4)), TERM0))))",
+      "sequencing": "mul(sub(TERM4, sum(mul(TERM4, TERM3), TERM5)), sub(max(sub(mul(TERM4, div(TERM5, TERM5)), sum(mul(TERM5, TERM0), max(TERM5, TERM0))), TERM2), sum(TERM2, max(TERM1, TERM2))))"
     }
   },
   "routes": [

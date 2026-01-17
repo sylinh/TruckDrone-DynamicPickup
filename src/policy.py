@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-import numpy as np
 from .features import featurize, FEATURE_ORDER
 from .ml import load_ml_model, score_model
 from .ml_logging import DecisionLogger
@@ -10,7 +9,7 @@ class Policy(ABC):
 
     @abstractmethod
     def route_request(self, state, req_idx):
-        """Chọn vehicle cho request mới xuất hiện. Trả về veh_id hoặc None (drop)."""
+        """Chọn vehicle cho request mới. Trả về veh_id, (veh_id, pos) hoặc None (drop)."""
         ...
 
     @abstractmethod
@@ -20,7 +19,7 @@ class Policy(ABC):
 
 
 class GreedyEDD(Policy):
-    """Baseline: gán/ưu tiên theo deadline l_i sớm nhất khả thi."""
+    """Baseline: ưu tiên deadline l_i sớm nhất (EDD) trên tập feasible."""
 
     def route_request(self, state, req_idx):
         req = state["req_df"].loc[req_idx]
@@ -41,7 +40,6 @@ class GreedyEDD(Policy):
         best = None
         for i in q:
             r = state["req_df"].loc[i]
-            # check time window feasibility at current time
             now = state["time"]
             if now > r["l_i"]:
                 continue
@@ -52,7 +50,7 @@ class GreedyEDD(Policy):
 
 
 class GPPolicy(Policy):
-    """Hai cây GP: R(features) và S(features) -> tính score, chọn max."""
+    """Hai cây GP: R(features) và S(features) -> score, chọn max."""
 
     def __init__(self, routing_func, sequencing_func):
         self.R = routing_func
@@ -67,7 +65,9 @@ class GPPolicy(Policy):
     def _score(self, state, veh_idx, req_idx, mode="R"):
         V = state["vehicles"][veh_idx]
         r = state["req_df"].loc[req_idx]
-        x = featurize(vehicle=V, req=r, sim=state)
+        sim_state = dict(state)
+        sim_state["veh_idx"] = veh_idx
+        x = featurize(vehicle=V, req=r, sim=sim_state)
         f = self.R if mode == "R" else self.S
         return float(f(*x))
 
@@ -76,7 +76,8 @@ class GPPolicy(Policy):
         for k, V in enumerate(state["vehicles"]):
             if not state["is_feasible"](k, state["req_df"].loc[req_idx]):
                 continue
-            feats = featurize(vehicle=V, req=state["req_df"].loc[req_idx], sim=state)
+            sim_state = dict(state); sim_state["veh_idx"] = k
+            feats = featurize(vehicle=V, req=state["req_df"].loc[req_idx], sim=sim_state)
             s = self._score(state, k, req_idx, mode="R")
             candidates.append((s, k, feats))
         if not candidates:
@@ -97,7 +98,8 @@ class GPPolicy(Policy):
             r = state["req_df"].loc[i]
             if state["time"] > r["l_i"]:
                 continue
-            feats = featurize(vehicle=V, req=r, sim=state)
+            sim_state = dict(state); sim_state["veh_idx"] = veh_idx
+            feats = featurize(vehicle=V, req=r, sim=sim_state)
             s = self._score(state, veh_idx, i, mode="S")
             candidates.append((s, i, feats))
         if not candidates:
@@ -134,7 +136,8 @@ class MLPolicy(Policy):
         for k, V in enumerate(state["vehicles"]):
             if not state["is_feasible"](k, state["req_df"].loc[req_idx]):
                 continue
-            feats = featurize(vehicle=V, req=state["req_df"].loc[req_idx], sim=state)
+            sim_state = dict(state); sim_state["veh_idx"] = k
+            feats = featurize(vehicle=V, req=state["req_df"].loc[req_idx], sim=sim_state)
             s = self._score_route(feats)
             candidates.append((s, k, feats))
         if not candidates:
@@ -155,7 +158,8 @@ class MLPolicy(Policy):
             r = state["req_df"].loc[i]
             if state["time"] > r["l_i"]:
                 continue
-            feats = featurize(vehicle=V, req=r, sim=state)
+            sim_state = dict(state); sim_state["veh_idx"] = veh_idx
+            feats = featurize(vehicle=V, req=r, sim=sim_state)
             s = self._score_seq(feats)
             candidates.append((s, i, feats))
         if not candidates:

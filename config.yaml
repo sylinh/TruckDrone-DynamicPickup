@@ -1,6 +1,6 @@
 ﻿data_root: data/raw
 static_input_root: inputs_static
-instance: "100.20.1"
+instance: "50.40.1"
 
 constraints:
   Lw: 3600
@@ -14,16 +14,16 @@ objective:
     unserved: 0.5
 
 gp:
-  pop_size: 180
-  intermed_size: 50
+  pop_size: 160
+  intermed_size: 30
   generations: 20
-  max_depth: 6
-  rm: 0.3
+  max_depth: 5
+  rm: 0.4
   rc: 0.6
-  tournament_k: 3
+  tournament_k: 2
 
   seed: 42
-  seed_ratio: 0.3
+  seed_ratio: 0.15
   seed_pairs:
     - ["min(TERM0, TERM4)", "min(TERM0, TERM4)"] # near + nearest-next
     - ["min(TERM0, TERM6)", "TERM6"] # near + due sooner

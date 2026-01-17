@@ -1,14 +1,115 @@
 import numpy as np
-import pandas as pd
 from math import hypot
-from copy import deepcopy
 
 
-def dist(a, b): return float(hypot(a[0]-b[0], a[1]-b[1]))
+def dist(a, b):
+    return float(hypot(a[0] - b[0], a[1] - b[1]))
+
+
+def _simulate_route(seq, veh, t_start, pos_start, req_df, depot, Lw):
+    """Simulate a fixed pickup order; return feasibility and simple risk metrics."""
+    speed = max(veh["speed"], 1e-9)
+    cap = veh["capacity"]
+    load = veh["load"]
+    t = t_start
+    pos = pos_start
+    pick_times = []
+    slack_min = float("inf")
+    slack_risk = 0.0
+
+    for idx in seq:
+        r = req_df.loc[idx]
+        if veh["type"] == "drone" and veh.get("radius", None) is not None:
+            if dist(depot, (r["x"], r["y"])) > veh["radius"]:
+                return {"feasible": False, "reason": "radius"}
+        demand = float(r["demand"])
+        if load + demand > cap:
+            return {"feasible": False, "reason": "capacity"}
+        travel = dist(pos, (r["x"], r["y"])) / speed
+        arrive = t + travel
+        start = max(arrive, r["e_i"])
+        if start > r["l_i"]:
+            return {"feasible": False, "reason": "due"}
+        load += demand
+        t = start  # service time ~0
+        pos = (r["x"], r["y"])
+        pick_times.append(t)
+        slack = r["l_i"] - t
+        slack_min = min(slack_min, slack)
+        slack_risk += 0.0 if slack <= 0 else 1.0 / max(slack, 1e-6)
+
+    end_time = t + dist(pos, depot) / speed if seq else t_start
+    for tp in pick_times:
+        if (end_time - tp) > Lw:
+            return {"feasible": False, "reason": "Lw"}
+
+    return {
+        "feasible": True,
+        "end_time": end_time,
+        "slack_min": slack_min if slack_min != float("inf") else 1e9,
+        "slack_risk": slack_risk,
+        "pick_times": pick_times,
+    }
+
+
+def _best_insertion_for_vehicle(req_idx, veh, queue, t_now, req_df, depot, Lw, base_cache=None):
+    """Find best insertion position for req_idx in vehicle queue. Returns None if no feasible slot."""
+    base_key = (tuple(queue), round(max(t_now, veh["free_at"]), 3))
+    if base_cache is not None and base_key not in base_cache:
+        base_cache[base_key] = _simulate_route(queue, veh, max(t_now, veh["free_at"]), veh["pos"], req_df, depot, Lw)
+    base = base_cache[base_key] if base_cache is not None else _simulate_route(queue, veh, max(t_now, veh["free_at"]), veh["pos"], req_df, depot, Lw)
+    base_end = base["end_time"] if base.get("feasible") else float("inf")
+
+    best = None
+    feasible_pos_count = 0
+    total_pos = len(queue) + 1
+    for pos in range(len(queue) + 1):
+        seq = list(queue[:pos]) + [req_idx] + list(queue[pos:])
+        res = _simulate_route(seq, veh, max(t_now, veh["free_at"]), veh["pos"], req_df, depot, Lw)
+        if not res.get("feasible"):
+            continue
+        feasible_pos_count += 1
+        delta_end = res["end_time"] - base_end if base_end != float("inf") else res["end_time"] - max(t_now, veh["free_at"])
+        score = delta_end + 0.1 * res.get("slack_risk", 0.0)
+        cand = {
+            "pos": pos,
+            "score": score,
+            "end_time": res["end_time"],
+            "slack_min": res.get("slack_min", 0.0),
+            "slack_risk": res.get("slack_risk", 0.0),
+            "delta_end": delta_end,
+        }
+        if (best is None) or (cand["score"] < best["score"]):
+            best = cand
+    if best:
+        best["feasible_pos_count"] = feasible_pos_count
+        best["total_pos"] = total_pos
+    return best
+
+
+def _local_repair(queue, veh, t_now, req_df, depot, Lw, center_pos, radius=1):
+    """Try small adjacent swaps around center_pos to rescue deadlines."""
+    best_seq = list(queue)
+    best_res = _simulate_route(best_seq, veh, max(t_now, veh["free_at"]), veh["pos"], req_df, depot, Lw)
+    if not best_res.get("feasible") or len(best_seq) < 2:
+        return queue  # keep original; higher layers drop if needed
+    n = len(queue)
+    lo = max(0, center_pos - radius)
+    hi = min(n - 2, center_pos + radius)  # need i+1 valid
+    if hi < lo:
+        return best_seq
+    for i in range(lo, hi + 1):
+        cand_seq = list(best_seq)
+        cand_seq[i], cand_seq[i + 1] = cand_seq[i + 1], cand_seq[i]
+        res = _simulate_route(cand_seq, veh, max(t_now, veh["free_at"]), veh["pos"], req_df, depot, Lw)
+        if res.get("feasible") and res["end_time"] < best_res["end_time"]:
+            best_seq, best_res = cand_seq, res
+    return best_seq
 
 
 def _mk_vehicles(cfg, depot):
     V = []
+
     def add(kind, count, speed, capacity, radius=None):
         for _ in range(int(count)):
             V.append({
@@ -17,7 +118,7 @@ def _mk_vehicles(cfg, depot):
                 "pos": depot, "load": 0.0, "free_at": 0.0, "queue": []
             })
     tr = cfg["vehicles"]["trucks"]; add("truck", tr["count"], tr["speed"], tr["capacity"])
-    dr = cfg["vehicles"].get("drones", {"count":0})
+    dr = cfg["vehicles"].get("drones", {"count": 0})
     if dr["count"] > 0:
         add("drone", dr["count"], dr["speed"], dr["capacity"], dr.get("radius", None))
     return V
@@ -34,10 +135,10 @@ def _norm_constants(req_df, cfg, depot):
 
 
 def run_episode(cfg, policy, req_df):
-    """Event-driven mô phỏng theo mã giả: request mới -> route R; xe rảnh -> sequence S."""
+    """Event-driven simulator with best-insertion, pending pool, and local repair."""
     req_df = req_df.sort_values("t_arrive").reset_index(drop=True)
     N = len(req_df)
-    depot = tuple(cfg.get("depot", [0.0,0.0]))
+    depot = tuple(cfg.get("depot", [0.0, 0.0]))
     vehs = _mk_vehicles(cfg, depot)
     Q_max = max([v["capacity"] for v in vehs] + [1.0])
     D_max, H = _norm_constants(req_df, cfg, depot)
@@ -46,6 +147,8 @@ def run_episode(cfg, policy, req_df):
     served, dropped = set(), set()
     drop_reasons = []
     timeline = []
+    pending = set()
+    base_cache = {}
     next_idx = 0
     t = 0.0
 
@@ -62,13 +165,15 @@ def run_episode(cfg, policy, req_df):
         demand = float(r["demand"])
         if demand > V["capacity"]:
             return False
+        # disallow drone serving non-dronable requests
+        if V["type"] == "drone" and not bool(r.get("drone_ok", 1)):
+            return False
         if V["type"] == "drone" and V.get("radius", None) is not None:
             if dist(depot, (r["x"], r["y"])) > V["radius"]:
                 return False
         load_now = V["load"] if load_override is None else load_override
         if (load_now + demand) > V["capacity"]:
             return False
-        # check time window feasibility from current pos/time
         t_ref = t if t_now is None else t_now
         pos_ref = V["pos"] if pos_override is None else pos_override
         travel_to = dist(pos_ref, (r["x"], r["y"])) / max(V["speed"], 1e-9)
@@ -78,13 +183,85 @@ def run_episode(cfg, policy, req_df):
             return False
         return True
 
+    def normalize_choice(choice):
+        if choice is None:
+            return None, None
+        if isinstance(choice, dict):
+            return choice.get("vehicle"), choice.get("pos")
+        if isinstance(choice, (tuple, list)) and len(choice) >= 2:
+            return choice[0], choice[1]
+        return choice, None
+
+    def assign_request(req_idx, t_now, veh_hint=None, pos_hint=None):
+        """Try to insert req_idx. Returns True if queued, False if pushed to pending."""
+        best = None
+        if veh_hint is not None:
+            k = int(veh_hint)
+            pos = None
+            ins = None
+            if pos_hint is not None:
+                pos = int(pos_hint)
+                seq = list(vehs[k]["queue"][:pos]) + [req_idx] + list(vehs[k]["queue"][pos:])
+                res = _simulate_route(seq, vehs[k], max(t_now, vehs[k]["free_at"]), vehs[k]["pos"], req_df, depot, Lw)
+                if res.get("feasible"):
+                    ins = {"pos": pos, "score": res["end_time"], "end_time": res["end_time"], "slack_min": res.get("slack_min"), "slack_risk": res.get("slack_risk")}
+            if ins is None:
+                ins = _best_insertion_for_vehicle(req_idx, vehs[k], vehs[k]["queue"], t_now, req_df, depot, Lw, base_cache)
+            if ins:
+                best = (ins, k)
+        if best is None:
+            for k, V in enumerate(vehs):
+                ins = _best_insertion_for_vehicle(req_idx, V, V["queue"], t_now, req_df, depot, Lw, base_cache)
+                if not ins:
+                    continue
+                cand = (ins["score"], -ins["slack_min"], k, ins)
+                if (best is None) or (cand < (best[0]["score"], -best[0]["slack_min"], best[1], best[0])):
+                    best = (ins, k)
+        if best:
+            ins, k = best
+            V = vehs[k]
+            V["queue"].insert(int(ins["pos"]), req_idx)
+            V["queue"] = _local_repair(V["queue"], V, t_now, req_df, depot, Lw, center_pos=int(ins["pos"]), radius=1)
+            return True
+        pending.add(req_idx)
+        return False
+
+    def pull_from_pending(veh_idx, t_now, top_k=5):
+        """When vehicle is free, try to pull one pending request into its queue."""
+        if not pending:
+            return
+        V = vehs[veh_idx]
+        cand_ids = sorted(list(pending), key=lambda i: req_df.loc[i, "l_i"])[:top_k]
+        best = None
+        for rid in cand_ids:
+            ins = _best_insertion_for_vehicle(rid, V, V["queue"], t_now, req_df, depot, Lw, base_cache)
+            if not ins:
+                continue
+            cand = (ins["score"], -ins["slack_min"], rid, ins)
+            if (best is None) or (cand < (best[0]["score"], -best[0]["slack_min"], best[1], best[0])):
+                best = (ins, rid)
+        if best:
+            ins, rid = best
+            V["queue"].insert(int(ins["pos"]), rid)
+            V["queue"] = _local_repair(V["queue"], V, t_now, req_df, depot, Lw, center_pos=int(ins["pos"]), radius=1)
+            pending.discard(rid)
+
+    def expire_list(lst, t_now, reason, veh_idx=None):
+        keep = []
+        for i in lst:
+            if t_now > req_df.loc[i, "l_i"]:
+                dropped.add(i)
+                log_drop(i, reason, t_now=t_now, veh_idx=veh_idx)
+            else:
+                keep.append(i)
+        return keep
+
     while True:
-        all_done = (len(served) + len(dropped) >= N) and all(len(v["queue"])==0 for v in vehs)
+        all_done = (len(served) + len(dropped) >= N) and all(len(v["queue"]) == 0 for v in vehs) and (len(pending) == 0)
         if all_done:
             break
 
         next_arrival = req_df.loc[next_idx, "t_arrive"] if next_idx < N else np.inf
-        # chỉ tính free_at trong tương lai; nếu đã <= t và không có queue thì bỏ qua để tránh kẹt
         free_candidates = []
         for v in vehs:
             if v["free_at"] > t or (v.get("queue") and len(v["queue"]) > 0):
@@ -95,9 +272,18 @@ def run_episode(cfg, policy, req_df):
             break
         t = max(t, t_next)
 
+        # expire pending + queues at current time
+        for rid in list(pending):
+            if t > req_df.loc[rid, "l_i"]:
+                pending.discard(rid)
+                dropped.add(rid)
+                log_drop(rid, "pending_expired", t_now=t)
+        for k, V in enumerate(vehs):
+            V["queue"] = expire_list(V.get("queue", []), t, "expired_waiting_in_queue", veh_idx=k)
+
         # pending coords for features (arrived, not served/dropped)
         arrived_mask = (req_df["t_arrive"] <= t) & (~req_df.index.isin(served)) & (~req_df.index.isin(dropped))
-        pending_coords = list(req_df.loc[arrived_mask, ["x","y"]].itertuples(index=False, name=None))
+        pending_coords = list(req_df.loc[arrived_mask, ["x", "y"]].itertuples(index=False, name=None))
 
         state_common = {
             "time": t, "vehicles": vehs, "req_df": req_df, "depot": depot,
@@ -105,32 +291,34 @@ def run_episode(cfg, policy, req_df):
             "pending_coords": pending_coords, "is_feasible": is_feasible,
         }
 
-        # 1) xử lý request mới (t_arrive <= t)
+        # 1) handle new arrivals (best-insertion)
         while next_idx < N and req_df.loc[next_idx, "t_arrive"] <= t:
-            r = req_df.loc[next_idx]
             state_common["time"] = t
+            ins_map = {}
+            for k, V in enumerate(vehs):
+                info = _best_insertion_for_vehicle(next_idx, V, V.get("queue", []), t, req_df, depot, Lw, base_cache)
+                if info:
+                    ins_map[k] = info
+            state_common["insertion_info"] = ins_map
             choice = policy.route_request(state_common, next_idx)
-            if choice is None:
-                dropped.add(next_idx)
-                log_drop(next_idx, "no_vehicle_feasible_at_arrival", t_now=t)
-            else:
-                # kiểm tra sơ bộ deadline nếu xếp vào queue của vehicle được chọn
-                Vc = vehs[choice]
-                t_ref = max(t, Vc["free_at"])
-                travel_to = dist(Vc["pos"], (r["x"], r["y"])) / max(Vc["speed"], 1e-9)
-                start_est = max(t_ref + travel_to, r["e_i"])
-                if start_est > r["l_i"]:
-                    dropped.add(next_idx)
-                    log_drop(next_idx, "cannot_fit_queue_deadline", t_now=t, veh_idx=choice,
-                             detail={"start_est": start_est, "l_i": r["l_i"]})
-                else:
-                    vehs[choice]["queue"].append(next_idx)
+            veh_hint, pos_hint = normalize_choice(choice)
+            assigned = False
+            if veh_hint is not None:
+                assigned = assign_request(next_idx, t, veh_hint=veh_hint, pos_hint=pos_hint)
+            if not assigned:
+                assign_request(next_idx, t)
             next_idx += 1
 
-        # 2) xe rảnh chọn khách tiếp theo, có thể phục vụ nhiều khách trên một hành trình trước khi về depot
+        # 2) free vehicles try to pull from pending
         for k, V in enumerate(vehs):
             if V["free_at"] > t:
-                continue  # đang di chuyển
+                continue
+            pull_from_pending(k, t, top_k=5)
+
+        # 3) vehicles that are free serve next customers
+        for k, V in enumerate(vehs):
+            if V["free_at"] > t:
+                continue
             if not V.get("queue"):
                 continue
             t_v = max(t, V["free_at"])
@@ -138,32 +326,25 @@ def run_episode(cfg, policy, req_df):
             load_v = V["load"]
             tour = []  # (req_idx, pick_time)
             while V.get("queue"):
+                V["queue"] = expire_list(V["queue"], t_v, "expired_waiting_in_queue", veh_idx=k)
+                if not V["queue"]:
+                    break
                 state_common["time"] = t_v
                 nxt = policy.select_next(state_common, k)
                 if nxt is None:
-                    # drop hết hạn, giữ lại khả thi
-                    keep = []
-                    for i in V.get("queue", []):
-                        r = req_df.loc[i]
-                        if t_v > r["l_i"]:
-                            dropped.add(i)
-                            log_drop(i, "expired_waiting_in_queue", t_now=t_v, veh_idx=k)
-                        else:
-                            keep.append(i)
-                    V["queue"] = keep
-                    break
+                    nxt = V["queue"][0]
+                if nxt not in V["queue"]:
+                    continue
                 r = req_df.loc[nxt]
                 if nxt in served or nxt in dropped:
                     V["queue"] = [x for x in V["queue"] if x != nxt]
                     continue
                 if r["t_arrive"] > t_v:
-                    # chưa đến thời điểm request xuất hiện
                     break
                 if not is_feasible(k, r, load_override=load_v, t_now=t_v, pos_override=pos_v):
                     V["queue"] = [x for x in V["queue"] if x != nxt]
                     continue
 
-                # thời gian di chuyển từ vị trí hiện tại tới khách
                 travel_to = dist(pos_v, (r["x"], r["y"])) / max(V["speed"], 1e-9)
                 arrive_cust = t_v + travel_to
                 start = max(arrive_cust, r["e_i"])
@@ -173,7 +354,6 @@ def run_episode(cfg, policy, req_df):
                     V["queue"] = [x for x in V["queue"] if x != nxt]
                     continue
 
-                # kiểm tra Lw cho toàn tour nếu thêm khách này (tính thời gian về depot)
                 t_pick_new = start
                 t_depot_new = t_pick_new + dist((r["x"], r["y"]), depot) / max(V["speed"], 1e-9)
                 feasible_Lw = True
@@ -188,7 +368,6 @@ def run_episode(cfg, policy, req_df):
                     log_drop(nxt, "violates_Lw", t_now=t_v, veh_idx=k)
                     continue
 
-                # serve khách, ở lại vị trí khách
                 t_v = start  # service time ~0
                 pos_v = (r["x"], r["y"])
                 load_v += float(r["demand"])
@@ -197,13 +376,11 @@ def run_episode(cfg, policy, req_df):
                 V["queue"] = [x for x in V["queue"] if x != nxt]
                 timeline.append((k, int(nxt), float(start), float(start)))
 
-            # về depot khi không còn queue hoặc không chọn được nữa
             travel_back = dist(pos_v, depot) / max(V["speed"], 1e-9)
             V["free_at"] = t_v + travel_back
             V["pos"] = depot
             V["load"] = 0.0
 
-            # drop các khách còn lại nếu đã quá hạn
             keep = []
             for i in V.get("queue", []):
                 r = req_df.loc[i]
@@ -214,7 +391,6 @@ def run_episode(cfg, policy, req_df):
                     keep.append(i)
             V["queue"] = keep
 
-    # drop tất cả request còn lại chưa phục vụ/ chưa drop (không còn sự kiện nào diễn ra)
     for i in range(N):
         if i not in served and i not in dropped:
             dropped.add(i)

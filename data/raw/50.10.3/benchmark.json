@@ -4,16 +4,18 @@
     "heuristic": {
       "name": "C+C",
       "makespan": 1425.2957,
-      "served": 33,
+      "served": null,
+      "penalty": 33.0,
       "fitness": 0.64496386
     },
     "gp_best": {
-      "gen": 1,
-      "makespan": 1005.0738,
-      "served": 2,
-      "fitness": 0.07193813,
-      "routing": "sum(sub(sum(min(TERM1, TERM0), sub(TERM2, TERM1)), min(sum(TERM1, TERM3), sum(TERM2, TERM1))), max(sub(div(TERM2, TERM3), max(TERM0, TERM1)), mul(sum(TERM0, TERM1), div(TERM4, TERM4))))",
-      "sequencing": "mul(div(sub(sub(TERM3, TERM1), max(TERM0, TERM2)), max(sum(TERM1, TERM1), div(TERM0, TERM3))), min(div(div(TERM2, TERM3), mul(TERM1, TERM1)), mul(mul(TERM4, TERM2), sub(TERM5, TERM1))))"
+      "gen": 186,
+      "makespan": 1300.7612,
+      "served": null,
+      "penalty": 0.0,
+      "fitness": 0.04651093,
+      "routing": "min(sum(sum(sum(TERM0, min(min(TERM3, TERM4), TERM1)), TERM3), sub(sub(sub(sub(TERM0, TERM1), TERM4), min(sum(TERM3, TERM1), sub(TERM1, TERM1))), max(sum(div(TERM2, TERM3), TERM4), sum(sub(TERM3, TERM0), min(TERM3, TERM3))))), mul(div(min(sub(TERM3, TERM4), sum(TERM3, TERM2)), max(sub(TERM1, TERM2), sub(TERM4, TERM3))), max(TERM1, TERM1)))",
+      "sequencing": "sum(max(sub(div(sub(min(TERM1, TERM3), TERM1), TERM3), TERM2), mul(div(min(TERM1, TERM4), mul(TERM4, TERM3)), TERM4)), min(TERM2, sum(div(TERM0, TERM4), mul(TERM4, min(sub(TERM4, TERM4), TERM4)))))"
     }
   },
   "routes": [

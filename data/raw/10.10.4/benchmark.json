@@ -4,13 +4,15 @@
     "heuristic": {
       "name": "C+C",
       "makespan": 1442.0653,
-      "served": 3,
+      "served": null,
+      "penalty": 3.0,
       "fitness": 0.3371579
     },
     "gp_best": {
       "gen": 1,
       "makespan": 1418.9701,
-      "served": 0,
+      "served": null,
+      "penalty": 0.0,
       "fitness": 0.06608235,
       "routing": "TERM1",
       "sequencing": "max(TERM5, mul(TERM2, div(sub(sub(TERM1, TERM3), max(TERM0, max(TERM3, TERM2))), mul(TERM1, max(TERM1, TERM2)))))"
