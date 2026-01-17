@@ -433,6 +433,7 @@ def _apply_static_input_to_cfg(cfg: dict, static_obj: dict):
     drone_speed = drone_data.get("V_max (m/s)") or drone_info.get("V_max (m/s)")
     drone_cap = drone_data.get("capacity [kg]") or drone_info.get("capacity")
     drone_radius = drone_info.get("radius") if isinstance(drone_info, dict) else None
+    drone_fixed = drone_data.get("FixedTime (s)") or (drone_info.get("FixedTime (s)") if isinstance(drone_info, dict) else None)
 
     veh["drones"] = {
         "count": int(drone_count),
@@ -441,6 +442,8 @@ def _apply_static_input_to_cfg(cfg: dict, static_obj: dict):
     }
     if drone_radius is not None:
         veh["drones"]["radius"] = float(drone_radius)
+    if drone_fixed is not None:
+        veh["drones"]["fixed_time"] = float(drone_fixed)
 
 # ---------- loader cho simulator ----------
 def load_instance(cfg):

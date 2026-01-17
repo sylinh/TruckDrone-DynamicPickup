@@ -42,6 +42,10 @@ def _simulate_route(seq, veh, t_start, pos_start, req_df, depot, Lw):
     for tp in pick_times:
         if (end_time - tp) > Lw:
             return {"feasible": False, "reason": "Lw"}
+    # giới hạn thời gian bay riêng cho drone (fixed_time)
+    if veh["type"] == "drone" and veh.get("fixed_time", None) is not None:
+        if (end_time - t_start) > veh["fixed_time"]:
+            return {"feasible": False, "reason": "fixed_time"}
 
     return {
         "feasible": True,
@@ -110,17 +114,18 @@ def _local_repair(queue, veh, t_now, req_df, depot, Lw, center_pos, radius=1):
 def _mk_vehicles(cfg, depot):
     V = []
 
-    def add(kind, count, speed, capacity, radius=None):
+    def add(kind, count, speed, capacity, radius=None, fixed_time=None):
         for _ in range(int(count)):
             V.append({
                 "type": kind, "speed": float(speed), "capacity": float(capacity),
                 "radius": None if radius is None else float(radius),
+                "fixed_time": None if fixed_time is None else float(fixed_time),
                 "pos": depot, "load": 0.0, "free_at": 0.0, "queue": []
             })
     tr = cfg["vehicles"]["trucks"]; add("truck", tr["count"], tr["speed"], tr["capacity"])
     dr = cfg["vehicles"].get("drones", {"count": 0})
     if dr["count"] > 0:
-        add("drone", dr["count"], dr["speed"], dr["capacity"], dr.get("radius", None))
+        add("drone", dr["count"], dr["speed"], dr["capacity"], dr.get("radius", None), dr.get("fixed_time", None))
     return V
 
 
@@ -135,7 +140,7 @@ def _norm_constants(req_df, cfg, depot):
 
 
 def run_episode(cfg, policy, req_df):
-    """Event-driven simulator with best-insertion, pending pool, and local repair."""
+    """Event-driven simulator với best-insertion, pending pool, local repair và policy routing/sequencing."""
     req_df = req_df.sort_values("t_arrive").reset_index(drop=True)
     N = len(req_df)
     depot = tuple(cfg.get("depot", [0.0, 0.0]))
@@ -152,6 +157,11 @@ def run_episode(cfg, policy, req_df):
     next_idx = 0
     t = 0.0
 
+    # ----------------------
+    # Helpers: logging + feasibility + normalize choice
+    # ----------------------
+
+    # Thu thập lý do drop để phân tích sau
     def log_drop(idx, reason, t_now=None, veh_idx=None, detail=None):
         rec = {"req_idx": int(idx), "reason": str(reason), "time": float(t if t_now is None else t_now)}
         if veh_idx is not None:
@@ -160,6 +170,7 @@ def run_episode(cfg, policy, req_df):
             rec["detail"] = detail
         drop_reasons.append(rec)
 
+    # Kiểm tra feasibility tức thời (tải, dronable, radius, time window) cho (vehicle k, request r)
     def is_feasible(k, r, load_override=None, t_now=None, pos_override=None):
         V = vehs[k]
         demand = float(r["demand"])
@@ -192,6 +203,11 @@ def run_episode(cfg, policy, req_df):
             return choice[0], choice[1]
         return choice, None
 
+    # ----------------------
+    # Helpers: assign/pending/pull/expire
+    # ----------------------
+
+    # Cố gắng chèn request vào queue (ưu tiên gợi ý từ policy), nếu không được thì đưa vào pending
     def assign_request(req_idx, t_now, veh_hint=None, pos_hint=None):
         """Try to insert req_idx. Returns True if queued, False if pushed to pending."""
         best = None
@@ -226,12 +242,14 @@ def run_episode(cfg, policy, req_df):
         pending.add(req_idx)
         return False
 
-    def pull_from_pending(veh_idx, t_now, top_k=5):
-        """When vehicle is free, try to pull one pending request into its queue."""
+    # Khi xe rảnh, kéo một yêu cầu từ pending (ưu tiên deadline sớm) nếu chèn được
+    def pull_from_pending(veh_idx, t_now, top_k=10):
+        """When vehicle is free, try to pull one pending request into its queue (priority by best insertion score)."""
         if not pending:
             return
         V = vehs[veh_idx]
-        cand_ids = sorted(list(pending), key=lambda i: req_df.loc[i, "l_i"])[:top_k]
+        # ưu tiên các yêu cầu gần hết hạn nhưng vẫn xét chất lượng chèn (score, slack)
+        cand_ids = sorted(list(pending), key=lambda i: req_df.loc[i, "l_i"])[:max(top_k, len(pending))]
         best = None
         for rid in cand_ids:
             ins = _best_insertion_for_vehicle(rid, V, V["queue"], t_now, req_df, depot, Lw, base_cache)
@@ -256,12 +274,17 @@ def run_episode(cfg, policy, req_df):
                 keep.append(i)
         return keep
 
+    # ----------------------
+    # Event loop
+    # ----------------------
+
     while True:
         all_done = (len(served) + len(dropped) >= N) and all(len(v["queue"]) == 0 for v in vehs) and (len(pending) == 0)
         if all_done:
             break
 
         next_arrival = req_df.loc[next_idx, "t_arrive"] if next_idx < N else np.inf
+        # thoi diem sớm nhất khi một xe bận hoặc đang có queue sẽ rảnh
         free_candidates = []
         for v in vehs:
             if v["free_at"] > t or (v.get("queue") and len(v["queue"]) > 0):
@@ -291,7 +314,7 @@ def run_episode(cfg, policy, req_df):
             "pending_coords": pending_coords, "is_feasible": is_feasible,
         }
 
-        # 1) handle new arrivals (best-insertion)
+        # 1) handle new arrivals (tính best-insertion, policy chọn xe/vị trí; nếu không gán được thì pending)
         while next_idx < N and req_df.loc[next_idx, "t_arrive"] <= t:
             state_common["time"] = t
             ins_map = {}
@@ -309,19 +332,20 @@ def run_episode(cfg, policy, req_df):
                 assign_request(next_idx, t)
             next_idx += 1
 
-        # 2) free vehicles try to pull from pending
+        # 2) free vehicles try to pull from pending (ưu tiên deadline sớm)
         for k, V in enumerate(vehs):
             if V["free_at"] > t:
                 continue
-            pull_from_pending(k, t, top_k=5)
+            pull_from_pending(k, t, top_k=10)
 
-        # 3) vehicles that are free serve next customers
+        # 3) vehicles that are free serve next customers (sequencing -> chọn khách trong queue)
         for k, V in enumerate(vehs):
             if V["free_at"] > t:
                 continue
             if not V.get("queue"):
                 continue
             t_v = max(t, V["free_at"])
+            tour_start = t_v  # mốc bắt đầu tour, dùng cho fixed_time của drone
             pos_v = V["pos"]
             load_v = V["load"]
             tour = []  # (req_idx, pick_time)
@@ -356,6 +380,7 @@ def run_episode(cfg, policy, req_df):
 
                 t_pick_new = start
                 t_depot_new = t_pick_new + dist((r["x"], r["y"]), depot) / max(V["speed"], 1e-9)
+                # Check giới hạn tour Lw: mọi điểm pickup trong tour phải có thời gian tới depot <= Lw
                 feasible_Lw = True
                 for _, t_pick_h in tour:
                     if (t_depot_new - t_pick_h) > Lw:
@@ -367,6 +392,12 @@ def run_episode(cfg, policy, req_df):
                     V["queue"] = [x for x in V["queue"] if x != nxt]
                     log_drop(nxt, "violates_Lw", t_now=t_v, veh_idx=k)
                     continue
+                # Check thời gian bay cố định của drone (nếu có)
+                if V["type"] == "drone" and V.get("fixed_time", None) is not None:
+                    if (t_depot_new - tour_start) > V["fixed_time"]:
+                        V["queue"] = [x for x in V["queue"] if x != nxt]
+                        log_drop(nxt, "violates_fixed_time", t_now=t_v, veh_idx=k)
+                        continue
 
                 t_v = start  # service time ~0
                 pos_v = (r["x"], r["y"])
