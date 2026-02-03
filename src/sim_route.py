@@ -1,8 +1,18 @@
+"""
+Các hàm lõi về mô phỏng lộ trình và chèn yêu cầu cho từng vehicle.
+- _simulate_route: mô phỏng tuyến cố định, kiểm tra TW/capacity/Lw/fixed_time.
+- _build_prefix_cache: lưu kết quả mô phỏng prefix để tái dùng khi thử chèn.
+- _best_insertion_for_vehicle: thử chèn một yêu cầu vào hàng đợi xe với prune/budget.
+- _local_repair: sửa nhẹ lộ trình sau khi chèn (swap/relocate nhỏ).
+
+Đơn vị: thời gian (giây), khoảng cách theo (x, y), tốc độ = dist/giây, Lw cùng đơn vị thời gian.
+"""
+
 from .sim_utils import safe_float, dist
 
 
 def _simulate_route(seq, veh, t_start, pos_start, req_df, depot, Lw, load_start=None):
-    """Simulate a fixed sequence for one vehicle; return feasibility and timing metrics."""
+    """Mô phỏng tuyến cố định cho 1 xe; trả về feasibility và các chỉ số thời gian."""
     speed = max(safe_float(veh.get("speed", 0.0), 0.0), 1e-9)
     cap = safe_float(veh.get("capacity", 0.0), 0.0)
     load = safe_float(veh.get("load", 0.0), 0.0) if load_start is None else safe_float(load_start, 0.0)
@@ -174,6 +184,7 @@ def _best_insertion_for_vehicle(
     urgent = (due_req - safe_float(t_now, 0.0)) < 0.2 * max(safe_float(Lw, 1.0), 1.0)
 
     n = len(queue)
+    # Giới hạn số vị trí thử để giữ ngân sách mô phỏng; trải đều dọc theo queue.
     if positions_override is not None:
         K = min(n + 1, int(positions_override))
     else:
@@ -281,6 +292,7 @@ def _best_insertion_for_vehicle(
             + w_slack * slack_norm
         )
 
+        # Thứ tự ưu tiên (lexicographic) để tránh thiên vị runtime: trễ hạn -> kéo dài tour -> slack -> risk
         rank_key = (round(late_pen, 6), round(delta_end_norm, 6), -slack_min_res, round(slack_risk_norm, 6))
 
         cand = {
@@ -300,6 +312,7 @@ def _best_insertion_for_vehicle(
         elif (second is None) or (cand["rank_key"] < second.get("rank_key", (float("inf"),))):
             second = cand
 
+        # Early-stop: đã có phương án đủ tốt (slack an toàn, tăng makespan nhỏ) thì dừng để tiết kiệm budget.
         if best and (slack_min_res > 0.3 * max(safe_float(Lw, 1.0), 1.0)) and (delta_end_norm < 0.02):
             break
 
