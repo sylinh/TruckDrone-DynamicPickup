@@ -1,3 +1,10 @@
+"""
+Giả lập event-driven cho hệ truck + drone động:
+- Xử lý arrival, pending, quyết định theo tick; chèn yêu cầu vào queue xe.
+- Ràng buộc: TW, capacity, Lw, drone_ok/fixed_time.
+- Dùng budget mô phỏng per-tick để giữ runtime ổn định; nhiều routine opportunistic/urgent/emergency.
+"""
+
 import random
 import numpy as np
 
@@ -131,7 +138,7 @@ def run_episode(cfg, policy, req_df):
     rng_global = random.Random(seed_val)
     last_try_time = {}
     next_decision_time = None
-    SIM_BUDGET_PER_TICK = 250  # global cap for simulate/try per decision tick to keep runtime stable
+    SIM_BUDGET_PER_TICK = 250  # Giới hạn mô phỏng mỗi tick để tránh nổ runtime (tăng cho bộ lớn nếu cần)
     tick_budget = {"remaining": SIM_BUDGET_PER_TICK}
 
     def reset_tick_budget():
@@ -144,6 +151,7 @@ def run_episode(cfg, policy, req_df):
         return True
 
     def weight_ctx():
+        """Trọng số thích ứng theo kích thước pending để cân bằng giữa slack và kéo dài tour."""
         pend = len(pending)
         if pend > 15:
             w_delta, w_slack = 0.5, -2.0
@@ -382,6 +390,7 @@ def run_episode(cfg, policy, req_df):
                 diag["glob_infeasible_drops"] = diag.get("glob_infeasible_drops", 0) + 1
                 log_drop(rid, "globally_infeasible_due", t_now=t_now)
 
+    # Chèn yêu cầu: nhận hint nếu có, nếu không thử top-K xe ETA thấp nhất.
     def assign_request(req_idx, t_now, veh_hint=None, pos_hint=None):
         VEH_TOP_K = 6  # thử tối đa K xe theo ETA lower bound
         candidates = []
@@ -767,7 +776,8 @@ def run_episode(cfg, policy, req_df):
         return keep
 
     # ----------------------
-    # Main loop
+    # Main loop: chọn sự kiện gần nhất (arrival / xe rảnh / pending sắp due / decision tick),
+    # xử lý pending -> gán -> phục vụ -> hết hạn, luôn tôn trọng tick_budget.
     # ----------------------
     prev_signature = None
     decision_dt = 30.0

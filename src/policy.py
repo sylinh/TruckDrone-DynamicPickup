@@ -1,3 +1,11 @@
+"""
+Chính sách chọn xe và thứ tự phục vụ:
+- GreedyEDD: baseline ưu tiên deadline sớm nhất trên tập feasible.
+- GPPolicy: 2 cây GP cho điểm (veh, req) cho routing/selection.
+- MLPolicy: cho điểm bằng model ML đã huấn luyện.
+- HybridPolicy: ưu tiên ML, fallback sang policy nền nếu không có lựa chọn.
+"""
+
 from abc import ABC, abstractmethod
 from .features import featurize, FEATURE_ORDER
 from .ml import load_ml_model, score_model
@@ -5,7 +13,7 @@ from .ml_logging import DecisionLogger
 
 
 class Policy(ABC):
-    """Policy gồm 2 thành phần: routing R (k,i) và sequencing S (k,i)."""
+    """Policy gồm 2 thành phần: routing R (chọn xe cho request mới) và sequencing S (chọn khách tiếp theo trong queue)."""
 
     @abstractmethod
     def route_request(self, state, req_idx):
@@ -19,7 +27,7 @@ class Policy(ABC):
 
 
 class GreedyEDD(Policy):
-    """Baseline: ưu tiên deadline l_i sớm nhất (EDD) trên tập feasible."""
+    """Baseline: ưu tiên deadline l_i sớm nhất (EDD) trên tập feasible."""  # đơn giản, determinisitc
 
     def route_request(self, state, req_idx):
         req = state["req_df"].loc[req_idx]
@@ -50,7 +58,7 @@ class GreedyEDD(Policy):
 
 
 class GPPolicy(Policy):
-    """Hai cây GP: R(features) và S(features) -> score, chọn max."""
+    """Hai cây GP: R(features) và S(features) -> score, chọn max."""  # giữ determinism theo seed khi build cây
 
     def __init__(self, routing_func, sequencing_func):
         self.R = routing_func
@@ -112,7 +120,7 @@ class GPPolicy(Policy):
 
 
 class MLPolicy(Policy):
-    """Score each (veh, req) with an ML model and pick max."""
+    """Score (veh, req) bằng model ML; tách route/sequence nếu model cung cấp."""
 
     def __init__(self, model_path: str, logger: DecisionLogger | None = None, instance: str | None = None):
         payload = load_ml_model(model_path)
@@ -172,7 +180,7 @@ class MLPolicy(Policy):
 
 
 class HybridPolicy(Policy):
-    """Use ML first; fallback to a base policy if no feasible choice."""
+    """Dùng ML trước; fallback sang policy nền nếu không có lựa chọn khả thi."""
 
     def __init__(self, ml_policy: MLPolicy, fallback: Policy):
         self.ml_policy = ml_policy

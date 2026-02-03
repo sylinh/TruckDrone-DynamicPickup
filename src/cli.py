@@ -1,4 +1,5 @@
 # src/cli.py
+# CLI vào nhanh cho các chế độ: eval, eval-ml, train-gp, batch.
 import argparse
 from pathlib import Path
 from datetime import datetime
@@ -25,7 +26,7 @@ def _results_dir(cfg):
     return root / str(cfg["instance"])
 
 def _routes_from_timeline(timeline):
-    """Group timeline entries by vehicle -> ordered route with times. Accepts tuple or dict events."""
+    """Gom sự kiện theo vehicle -> tuyến có thứ tự và thời gian. Chấp nhận event dạng tuple hoặc dict."""
     routes = {}
     for ev in timeline:
         if isinstance(ev, dict):
@@ -152,7 +153,9 @@ def _clean_results_for_instance(cfg, inst: str):
         shutil.rmtree(target, ignore_errors=True)
 
 # ---------- single run helpers ----------
+# Các hàm chạy 1 instance cho baseline / GP / ML, ghi kết quả + so sánh benchmark.
 def _run_eval_baseline(cfg_base: dict, instance: str, save_each: bool = True):
+    """Chạy baseline deterministic cho một instance, ghi timeline/routes/so sánh benchmark."""
     cfg = dict(cfg_base); cfg["instance"] = instance
     req_df, bench = load_instance(cfg)
     pol = build_baseline()
@@ -174,6 +177,7 @@ def _run_eval_baseline(cfg_base: dict, instance: str, save_each: bool = True):
     return stats, compare, bench_best
 
 def _run_train_eval_gp(cfg_base: dict, instance: str, save_each: bool = True):
+    """Huấn luyện GP trên instance rồi đánh giá rule tốt nhất, lưu kết quả nếu cần."""
     cfg = dict(cfg_base); cfg["instance"] = instance
     req_df, bench = load_instance(cfg)
     pair = train_gphh(cfg)
@@ -192,6 +196,7 @@ def _run_train_eval_gp(cfg_base: dict, instance: str, save_each: bool = True):
     return stats, compare, bench_best
 
 def _run_eval_ml(cfg_base: dict, instance: str, model_path: str, log_path: str | None = None, save_each: bool = True):
+    """Đánh giá model ML (route/sequence) trên 1 instance; nếu log_path có thì ghi log quyết định."""
     from .policy import MLPolicy
     from .ml_logging import DecisionLogger
     cfg = dict(cfg_base); cfg["instance"] = instance
