@@ -461,6 +461,9 @@ def load_instance(cfg):
             elif c == "l_i": req[c] = 1e9
             else: raise ValueError(f"Thiếu cột bắt buộc: {c}")
     req = req[REQ_COLS].copy()
+    if cfg.get("constraints", {}).get("force_drone_ok", False):
+        # Tuỳ chọn thử nghiệm: ép mọi yêu cầu đều cho phép drone
+        req["drone_ok"] = 1
 
     bench = None
     bj = inst_dir / "benchmark.json"

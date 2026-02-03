@@ -6,7 +6,7 @@ import json, yaml, re, shutil
 
 from .io_drive import load_instance
 from .policy import build_baseline
-from .sim import run_episode
+from .sim import run_episode, validate_routes
 from .gp import train_gphh, build_gp_policy_from_pair
 
 # ---------- utils ----------
@@ -25,9 +25,18 @@ def _results_dir(cfg):
     return root / str(cfg["instance"])
 
 def _routes_from_timeline(timeline):
-    """Group timeline entries by vehicle -> ordered route with times."""
+    """Group timeline entries by vehicle -> ordered route with times. Accepts tuple or dict events."""
     routes = {}
-    for veh, req_idx, t_start, t_end in timeline:
+    for ev in timeline:
+        if isinstance(ev, dict):
+            veh = ev.get("vehicle")
+            req_idx = ev.get("req")
+            t_start = ev.get("start")
+            t_end = ev.get("finish", t_start)
+        else:
+            if not isinstance(ev, (list, tuple)) or len(ev) < 4:
+                continue
+            veh, req_idx, t_start, t_end = ev[0], ev[1], ev[2], ev[3]
         routes.setdefault(int(veh), []).append({"req": int(req_idx), "start": float(t_start), "finish": float(t_end)})
     for k in list(routes.keys()):
         routes[k] = sorted(routes[k], key=lambda r: r["start"])
@@ -148,6 +157,8 @@ def _run_eval_baseline(cfg_base: dict, instance: str, save_each: bool = True):
     req_df, bench = load_instance(cfg)
     pol = build_baseline()
     stats, timeline = run_episode(cfg, pol, req_df)
+    routes = _routes_from_timeline(timeline)
+    violations = validate_routes(routes, req_df, cfg)
     bench_best = dict(_bench_best(bench) or {})
     bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
@@ -155,7 +166,8 @@ def _run_eval_baseline(cfg_base: dict, instance: str, save_each: bool = True):
         outdir = _results_dir(cfg)
         _write_json(outdir, "eval_result", {
             "mode":"baseline","instance":instance,"cfg":{"objective":cfg.get("objective"),"weights":cfg.get("weights")},
-            "stats":stats,"timeline":timeline,"routes":_routes_from_timeline(timeline),
+            "stats":stats,"timeline":timeline,"routes":routes,
+            "validation":{"valid": len(violations)==0, "violations": violations},
             "benchmark_summary":(bench.get("summary") if isinstance(bench,dict) else None),
         })
         _write_json(outdir, "eval_vs_benchmark", {"mode":"baseline","instance":instance,"compare":compare})
@@ -167,13 +179,15 @@ def _run_train_eval_gp(cfg_base: dict, instance: str, save_each: bool = True):
     pair = train_gphh(cfg)
     pol = build_gp_policy_from_pair(cfg, pair)
     stats, timeline = run_episode(cfg, pol, req_df)
+    routes = _routes_from_timeline(timeline)
+    violations = validate_routes(routes, req_df, cfg)
     bench_best = dict(_bench_best(bench) or {})
     bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
     if save_each:
         outdir = _results_dir(cfg)
         _write_json(outdir, "gp_train", {"mode":"gp_train","instance":instance,"gp_cfg":cfg.get("gp"),"best_pair":_extract_pair_info(pair)})
-        _write_json(outdir, "gp_eval",  {"mode":"gp_eval","instance":instance,"cfg":{"objective":cfg.get("objective"),"weights":cfg.get("weights")},"stats":stats,"timeline":timeline,"routes":_routes_from_timeline(timeline),"benchmark_summary":(bench.get("summary") if isinstance(bench,dict) else None)})
+        _write_json(outdir, "gp_eval",  {"mode":"gp_eval","instance":instance,"cfg":{"objective":cfg.get("objective"),"weights":cfg.get("weights")},"stats":stats,"timeline":timeline,"routes":routes,"validation":{"valid": len(violations)==0, "violations": violations},"benchmark_summary":(bench.get("summary") if isinstance(bench,dict) else None)})
         _write_json(outdir, "gp_vs_benchmark", {"mode":"gp","instance":instance,"compare":compare})
     return stats, compare, bench_best
 
@@ -186,12 +200,14 @@ def _run_eval_ml(cfg_base: dict, instance: str, model_path: str, log_path: str |
     pol = MLPolicy(model_path=model_path, logger=logger, instance=instance)
     stats, timeline = run_episode(cfg, pol, req_df)
     if logger: logger.close()
+    routes = _routes_from_timeline(timeline)
+    violations = validate_routes(routes, req_df, cfg)
     bench_best = dict(_bench_best(bench) or {})
     bench_best.update({k:v for k,v in _bench_counts(bench, total=stats.get("total")).items() if bench_best.get(k) is None})
     compare = _compare_vs_benchmark(stats, bench_best)
     if save_each:
         outdir = _results_dir(cfg)
-        _write_json(outdir, "ml_eval",  {"mode":"ml","instance":instance,"cfg":{"objective":cfg.get("objective"),"weights":cfg.get("weights")},"stats":stats,"timeline":timeline,"routes":_routes_from_timeline(timeline),"benchmark_summary":(bench.get("summary") if isinstance(bench,dict) else None),"model_path":model_path})
+        _write_json(outdir, "ml_eval",  {"mode":"ml","instance":instance,"cfg":{"objective":cfg.get("objective"),"weights":cfg.get("weights")},"stats":stats,"timeline":timeline,"routes":routes,"validation":{"valid": len(violations)==0, "violations": violations},"benchmark_summary":(bench.get("summary") if isinstance(bench,dict) else None),"model_path":model_path})
         _write_json(outdir, "ml_vs_benchmark", {"mode":"ml","instance":instance,"compare":compare})
     return stats, compare, bench_best
 

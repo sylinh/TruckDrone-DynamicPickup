@@ -18,6 +18,13 @@ FEATURE_ORDER: List[str] = [
     "ins_delta_end",     # 10: delta end-time of best insertion / H
     "ins_slack_min",     # 11: min slack along best insertion / H
     "ins_feasible_frac", # 12: feasible positions / (|queue|+1)
+    "queue_size_frac",   # 13: |queue| / total requests
+    "queue_demand_gap",  # 14: (cap - sum(queue demand)) / total demand
+    "median_dist_norm",  # 15: dist(median queue coords -> req) / D_max
+    "travel_time_norm",  # 16: travel time v->req / H
+    "demand_total_frac", # 17: demand / total demand
+    "time_to_close_from_free", # 18: max(0, l_i - free_at) / H
+    "arrive_frac",            # 19: t_arrive / H
 ]
 
 def _get(obj: Any, *names: str, default=None):
@@ -59,6 +66,8 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
         sim = state["sim"]
 
     now = float(_get(sim, "time", "t", "now", default=0.0))
+    total_demand_all = float(_get(sim, "total_demand", default=0.0)) or None
+    total_reqs = int(_get(sim, "total_reqs", default=0)) or None
 
     # norm constants
     D_max = float(_get(sim, "D_max", default=1.0)) or 1.0
@@ -68,6 +77,7 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
     # vehicle params
     cap = float(_get(vehicle, "capacity", "cap", default=1.0))
     load = float(_get(vehicle, "load", default=0.0))
+    free_at = float(_get(vehicle, "free_at", default=0.0))
     rem_cap = max(0.0, cap - load)
     is_drone = 1.0 if str(_get(vehicle, "type", default="truck")).lower() == "drone" else 0.0
     vx, vy = _pos_xy(vehicle)
@@ -117,6 +127,43 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
     total_pos = float(ins_info.get("total_pos", queue_len + 1))
     feasible_frac = feasible_cnt / max(total_pos, 1.0)
 
+    # queue-level metrics relative to total requests/demand
+    total_req_count = float(total_reqs) if total_reqs else float(len(_get(sim, "req_df", [])) or 1.0)
+    queue_size_frac = float(queue_len) / max(total_req_count, 1.0)
+    queue_demand = 0.0
+    if isinstance(q_obj, (list, tuple)) and hasattr(sim, "get"):
+        try:
+            req_df = sim.get("req_df", None)
+            if req_df is not None:
+                for qi in q_obj:
+                    queue_demand += float(req_df.loc[qi, "demand"])
+        except Exception:
+            queue_demand = 0.0
+    total_demand_val = total_demand_all if total_demand_all and total_demand_all > 0 else (queue_demand + demand + 1e-9)
+    queue_demand_gap = (cap - queue_demand) / max(total_demand_val, 1e-9)
+
+    # median of queue coords -> req distance
+    median_dist = 0.0
+    if isinstance(q_obj, (list, tuple)) and q_obj and hasattr(sim, "get"):
+        try:
+            req_df = sim.get("req_df", None)
+            if req_df is not None:
+                xs = [req_df.loc[qi, "x"] for qi in q_obj]
+                ys = [req_df.loc[qi, "y"] for qi in q_obj]
+                mx = sorted(xs)[len(xs)//2]
+                my = sorted(ys)[len(ys)//2]
+                median_dist = math.hypot(mx - rx, my - ry) / D_max
+        except Exception:
+            median_dist = 0.0
+
+    # travel time to req normalized by horizon
+    travel_time_norm = (math.hypot(vx - rx, vy - ry) / max(_get(vehicle, "speed", 1.0), 1e-9)) / H
+
+    # demand fraction over total demand
+    demand_total_frac = demand / max(total_demand_val, 1e-9)
+    time_to_close_from_free = max(0.0, l_i - free_at) / H
+    arrive_frac = t_arr / H
+
     vec = [
         float(dist_v_req),
         float(demand_norm),
@@ -131,7 +178,22 @@ def featurize(vehicle: Any = None, req: Any = None, sim: Any = None, **state) ->
         float(delta_end_norm),
         float(slack_min_norm),
         float(feasible_frac),
+        float(queue_size_frac),
+        float(queue_demand_gap),
+        float(median_dist),
+        float(travel_time_norm),
+        float(demand_total_frac),
+        float(time_to_close_from_free),
+        float(arrive_frac),
     ]
+    # Optional feature mask: either list of indices to keep, or boolean mask same length
+    mask = _get(sim, "feature_mask", default=None)
+    if isinstance(mask, (list, tuple)):
+        if all(isinstance(m, (int, bool)) for m in mask) and len(mask) == len(vec):
+            vec = [v if mask[i] else 0.0 for i, v in enumerate(vec)]
+        elif all(isinstance(m, int) for m in mask):
+            keep = set(mask)
+            vec = [v if i in keep else 0.0 for i, v in enumerate(vec)]
     return vec
 
 

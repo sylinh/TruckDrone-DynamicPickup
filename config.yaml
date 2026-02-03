@@ -1,36 +1,42 @@
 ﻿data_root: data/raw
 static_input_root: inputs_static
-instance: "100.20.1"
+instance: "20.20.4"
 
 constraints:
   Lw: 3600
+  force_drone_ok: false
 
 objective:
   mode: weighted
-  lambda_w: 0.05
-  drop_penalty: 50.0
+  lambda_w: 0.1
+  drop_penalty: 100.0
   weights:
     makespan: 0.5
     unserved: 0.5
 
+features:
+  mask: null
+
 gp:
-  pop_size: 120
-  intermed_size: 30
-  generations: 20
-  max_depth: 6
-  rm: 0.5
-  rc: 0.7
-  tournament_k: 2
+  pop_size: 150
+  intermed_size: 70
+  generations: 45
+  max_depth: 4
+  rm: 0.25
+  rc: 0.8
+  tournament_k: 3
+
+  stall_gens: 8
+  stall_eps: 1e-4
 
   seed: 42
-  seed_ratio: 0.15
+  seed_ratio: 0.2
   seed_pairs:
     - ["min(TERM0, TERM4)", "min(TERM0, TERM4)"] # near + nearest-next
     - ["min(TERM0, TERM3)", "TERM3"] # near + balance load
     - ["TERM1", "TERM2"] # demand vs rem cap
     - ["min(TERM1, TERM4)", "TERM3"] # demand small + nearest-next
     - ["max(TERM1, TERM5)", "min(TERM2, TERM4)"] # prioritize small demand, balance
-    - ["min(TERM0, TERM6)", "min(TERM4, TERM6)"]
     - ["min(TERM1, TERM3)", "min(TERM1, TERM3)"]
 
 log_dir: runs

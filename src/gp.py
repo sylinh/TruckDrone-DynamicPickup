@@ -35,7 +35,7 @@ def compile_ind(toolbox, ind):
 
 
 def build_toolbox(cfg):
-    random.seed(cfg.get("seed", 0))
+    random.seed(cfg.get("gp", {}).get("seed", 0))
     n = len(FEATURE_ORDER)
     pset = build_pset(n)
     # avoid recreating the same classes (DEAP warns if recreated)
@@ -103,6 +103,8 @@ def train_gphh(cfg):
     pop_size = cfg["gp"]["pop_size"]
     inter = cfg["gp"]["intermed_size"]
     gens = cfg["gp"]["generations"]
+    stall_gens = cfg["gp"].get("stall_gens", None)
+    stall_eps = float(cfg["gp"].get("stall_eps", 1e-4))
     k = cfg["gp"]["tournament_k"]
 
     # each individual is a tuple (routing_tree, sequencing_tree)
@@ -127,6 +129,8 @@ def train_gphh(cfg):
         return out
 
     fits = list(map(fitness, pop))
+    best_fit = min(fits, key=lambda f: f[0])[0]
+    stall_counter = 0
     for gen in range(gens):
         order = sorted(range(len(pop)), key=lambda i: fits[i][0])
         elites = [pop[order[0]], pop[order[1]]] if len(pop) >= 2 else [pop[order[0]]]
@@ -160,6 +164,14 @@ def train_gphh(cfg):
 
         best_now = min(fits, key=lambda f: f[0])[0]
         print(f"[Gen {gen+1}/{gens}] best F = {best_now:.4f}")
+        if best_now + stall_eps < best_fit:
+            best_fit = best_now
+            stall_counter = 0
+        else:
+            stall_counter += 1
+        if stall_gens is not None and stall_counter >= int(stall_gens):
+            print(f"Early stop: no improvement for {stall_counter} generations (eps={stall_eps})")
+            break
 
     best_idx = min(range(len(pop)), key=lambda i: fits[i][0])
     best_pair = pop[best_idx]
