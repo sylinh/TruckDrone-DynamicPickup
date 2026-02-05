@@ -138,7 +138,7 @@ def run_episode(cfg, policy, req_df):
     rng_global = random.Random(seed_val)
     last_try_time = {}
     next_decision_time = None
-    SIM_BUDGET_PER_TICK = 250  # Giới hạn mô phỏng mỗi tick để tránh nổ runtime (tăng cho bộ lớn nếu cần)
+    SIM_BUDGET_PER_TICK = int(cfg.get("sim_budget_per_tick", cfg.get("sim_budget", {}).get("per_tick", 350)))  # mặc định 350, cho phép override trong config
     tick_budget = {"remaining": SIM_BUDGET_PER_TICK}
 
     def reset_tick_budget():
@@ -471,7 +471,10 @@ def run_episode(cfg, policy, req_df):
         V["queue"] = new_q
         return True
 
-    def pull_from_pending_fast(veh_idx, t_now, max_pull=20, cand_limit=20, max_sim_calls_pull=180):
+    def pull_from_pending_fast(veh_idx, t_now, max_pull=None, cand_limit=None, max_sim_calls_pull=None):
+        max_pull = max_pull or int(cfg.get("sim_budget", {}).get("pull_max", 25))
+        cand_limit = cand_limit or int(cfg.get("sim_budget", {}).get("pull_cand", 25))
+        max_sim_calls_pull = max_sim_calls_pull or int(cfg.get("sim_budget", {}).get("pull_calls", 200))
         if (not pending) or tick_budget["remaining"] <= 0:
             return
 
@@ -655,7 +658,7 @@ def run_episode(cfg, policy, req_df):
         rid = min(list(pending), key=lambda i: safe_float(req_df.loc[i, "l_i"], 0.0))
         veh_candidates = sorted(range(len(vehs)), key=lambda k: vehicle_eta_lower_bound(k, rid, t_now))[:5]
 
-        sim_budget = 220
+        sim_budget = int(cfg.get("sim_budget", {}).get("emergency_calls", 250))
         sim_used = 0
 
         diag["emergency_calls"] = diag.get("emergency_calls", 0) + 1
@@ -714,7 +717,10 @@ def run_episode(cfg, policy, req_df):
                         if sim_used >= sim_budget:
                             return
 
-    def urgent_pull_pending(t_now, max_candidates=5, veh_top_k=3, sim_budget=120):
+    def urgent_pull_pending(t_now, max_candidates=None, veh_top_k=None, sim_budget=None):
+        max_candidates = max_candidates or int(cfg.get("sim_budget", {}).get("urgent_candidates", 5))
+        veh_top_k = veh_top_k or int(cfg.get("sim_budget", {}).get("urgent_veh_top", 4))
+        sim_budget = sim_budget or int(cfg.get("sim_budget", {}).get("urgent_sim_budget", 160))
         if (not pending) or tick_budget["remaining"] <= 0:
             return
         min_due_left = min([safe_float(req_df.loc[i, "l_i"], 0.0) - safe_float(t_now, 0.0) for i in pending])
@@ -780,7 +786,7 @@ def run_episode(cfg, policy, req_df):
     # xử lý pending -> gán -> phục vụ -> hết hạn, luôn tôn trọng tick_budget.
     # ----------------------
     prev_signature = None
-    decision_dt = 30.0
+    decision_dt = 20.0
 
     while True:
         reset_tick_budget()

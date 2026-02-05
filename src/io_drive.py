@@ -461,6 +461,10 @@ def load_instance(cfg):
             elif c == "l_i": req[c] = 1e9
             else: raise ValueError(f"Thiếu cột bắt buộc: {c}")
     req = req[REQ_COLS].copy()
+    # Đồng bộ thứ tự với mô phỏng: sắp theo thời gian đến nhưng GIỮ nguyên mã khách gốc trong cột req_id.
+    # Index (0..N-1) được simulator dùng nội bộ; req_id giữ id gốc để ánh xạ ra/vào file lời giải.
+    req = req.sort_values("t_arrive").reset_index(drop=True)
+
     if cfg.get("constraints", {}).get("force_drone_ok", False):
         # Tuỳ chọn thử nghiệm: ép mọi yêu cầu đều cho phép drone
         req["drone_ok"] = 1

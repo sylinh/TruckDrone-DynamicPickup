@@ -1,0 +1,50 @@
+"\xEF\xBB\xBFdata_root": data/raw
+static_input_root: inputs_static
+instance: 20.20.4
+constraints:
+  Lw: 3600
+  force_drone_ok: false
+objective:
+  mode: weighted
+  lambda_w: 0.1
+  drop_penalty: 2000.0
+  weights:
+    makespan: 0.5
+    unserved: 0.5
+features:
+  mask: null
+gp:
+  pop_size: 260
+  intermed_size: 130
+  generations: 70
+  max_depth: 4
+  rm: 0.25
+  rc: 0.8
+  tournament_k: 3
+  stall_gens: 20
+  stall_eps: 0.0001
+  seed: 42
+  seed_ratio: 0.2
+  seed_pairs:
+  - - min(TERM0, TERM4)
+    - min(TERM0, TERM4)
+  - - min(TERM0, TERM3)
+    - TERM3
+  - - TERM1
+    - TERM2
+  - - min(TERM1, TERM4)
+    - TERM3
+  - - max(TERM1, TERM5)
+    - min(TERM2, TERM4)
+  - - min(TERM1, TERM3)
+    - min(TERM1, TERM3)
+log_dir: runs
+sim_budget:
+  per_tick: 700
+  pull_max: 45
+  pull_cand: 45
+  pull_calls: 280
+  urgent_candidates: 6
+  urgent_veh_top: 5
+  urgent_sim_budget: 240
+  emergency_calls: 350

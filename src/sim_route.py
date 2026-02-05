@@ -202,7 +202,7 @@ def _best_insertion_for_vehicle(
         start_t = t_plan if pos == 0 else (time_after[pos - 1] if len(time_after) >= pos else t_plan)
         start_pos = pos_plan if pos == 0 else (pos_after[pos - 1] if len(pos_after) >= pos else pos_plan)
         speed_lb = max(safe_float(veh.get("speed", 0.0), 0.0), 1e-9)
-        travel_lb_pos = dist(start_pos, (rx, ry)) / speed_lb
+        travel_lb_pos = 0.97 * dist(start_pos, (rx, ry)) / speed_lb
         arrive_lb = start_t + travel_lb_pos
         start_service_lb = max(arrive_lb, e_i)
         finish_lb = start_service_lb + dist((rx, ry), depot) / speed_lb

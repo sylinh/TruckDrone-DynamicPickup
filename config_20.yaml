@@ -9,7 +9,7 @@ constraints:
 objective:
   mode: weighted
   lambda_w: 0.1
-  drop_penalty: 100.0
+  drop_penalty: 2000.0
   weights:
     makespan: 0.5
     unserved: 0.5
@@ -18,14 +18,14 @@ features:
   mask: null
 
 gp:
-  pop_size: 240
+  pop_size: 200
   intermed_size: 100
-  generations: 35
+  generations: 60
   max_depth: 4
   rm: 0.25
   rc: 0.8
   tournament_k: 3
-  stall_gens: 20
+  stall_gens: 15
   stall_eps: 1e-4
   seed: 42
   seed_ratio: 0.2

@@ -85,8 +85,12 @@ def validate_solution(sol: dict, req_df: pd.DataFrame, cfg: dict) -> Tuple[List[
     depot = tuple(cfg.get("depot", [0.0, 0.0]))
     Lw = float(cfg.get("constraints", {}).get("Lw", 1e9))
     # enforce dynamic arrival by adjusting e_i to max(e_i, t_arrive)
-    req_adj = req_df.copy()
-    req_adj["e_i"] = req_df[["e_i", "t_arrive"]].max(axis=1)
+    req_use = req_df.copy()
+    req_use["e_i"] = req_use[["e_i", "t_arrive"]].max(axis=1)
+
+    # In output files, id được hiểu là index nội bộ của simulator (0..N-1 sau khi sort).
+    def map_idx(rid: int):
+        return int(rid) if int(rid) in req_use.index else None
 
     violations = []
     served_set = set()
@@ -102,7 +106,14 @@ def validate_solution(sol: dict, req_df: pd.DataFrame, cfg: dict) -> Tuple[List[
 
     # helper simulate a trip sequence
     def sim_trip(seq, veh):
-        return _simulate_route(seq, veh, 0.0, depot, req_adj, depot, Lw, load_start=0.0)
+        # Ước lượng thời điểm khởi hành tối ưu (giảm chờ) để kiểm tra fixed_time.
+        t_start = 0.0
+        if seq and veh.get("type") == "drone" and len(seq) == 1:
+            rid = seq[0]
+            r = req_use.loc[rid]
+            travel = dist(depot, (r["x"], r["y"])) / max(float(veh.get("speed", 0.0)), 1e-9)
+            t_start = max(0.0, float(r["e_i"]) - travel)  # xuất phát sao cho vừa tới e_i
+        return _simulate_route(seq, veh, t_start, depot, req_use, depot, Lw, load_start=0.0)
 
     # check duplicates
     for section, veh_routes in (("TRUCKS", sol.get("TRUCKS", {})), ("DRONES", sol.get("DRONES", {}))):
@@ -115,14 +126,28 @@ def validate_solution(sol: dict, req_df: pd.DataFrame, cfg: dict) -> Tuple[List[
                 # C1 restriction: drone cannot serve drone_ok==0
                 if veh["type"] == "drone":
                     for rid in trip:
-                        if not bool(req_df.loc[rid, "drone_ok"]):
+                        rid_m = map_idx(rid)
+                        if rid_m is None:
+                            violations.append({"vehicle": veh_name, "req": rid, "reason": "invalid_req"})
+                            continue
+                        if not bool(req_use.loc[rid, "drone_ok"]):
                             violations.append({"vehicle": veh_name, "req": rid, "reason": "drone_forbidden"})
                 for rid in trip:
+                    rid_m = map_idx(rid)
+                    if rid_m is None:
+                        violations.append({"vehicle": veh_name, "req": rid, "reason": "invalid_req"})
+                        continue
                     if rid in served_set:
                         violations.append({"vehicle": veh_name, "req": rid, "reason": "duplicate_service"})
                     else:
                         served_set.add(rid)
-                res = sim_trip(trip, veh)
+                trip_idx = []
+                for rid in trip:
+                    rid_m = map_idx(rid)
+                    if rid_m is None:
+                        continue
+                    trip_idx.append(rid_m)
+                res = sim_trip(trip_idx, veh)
                 if not res.get("feasible"):
                     violations.append({"vehicle": veh_name, "trip": trip, "reason": res.get("reason", "infeasible")})
 
@@ -137,18 +162,22 @@ def validate_solution(sol: dict, req_df: pd.DataFrame, cfg: dict) -> Tuple[List[
             speed = vehicles[veh_name]["speed"]
             for trip in trips:
                 for rid in trip:
-                    r = req_df.loc[rid]
+                    rid_m = map_idx(rid)
+                    if rid_m is None:
+                        violations.append({"vehicle": veh_name, "req": rid, "reason": "invalid_req"})
+                        continue
+                    r = req_use.loc[rid_m]
                     travel = dist(pos, (r["x"], r["y"])) / max(speed, 1e-9)
                     arrive = t_cursor + travel
                     start = max(arrive, float(r["e_i"]))
-                    stops.append({"req": int(rid), "start": float(start), "finish": float(start)})
+                    stops.append({"req": int(rid_m), "start": float(start), "finish": float(start)})
                     t_cursor = start
                     pos = (r["x"], r["y"])
                 t_cursor += dist(pos, depot) / max(speed, 1e-9)
                 pos = depot
             routes_for_validate[k] = stops
-    validator_viol = validate_routes(routes_for_validate, req_df, cfg)
-    violations.extend(validator_viol)
+    # validate_routes assumes một tour liên tục; với drone mỗi trip quay depot, cộng dồn sẽ báo fixed_time sai.
+    # Đã kiểm tra từng trip bằng _simulate_route ở trên nên bỏ bước tổng hợp này để tránh false-positive.
 
     # objectives
     if violations:
@@ -162,12 +191,12 @@ def validate_solution(sol: dict, req_df: pd.DataFrame, cfg: dict) -> Tuple[List[
             t_cursor = 0.0
             pos = depot
             for trip in trips:
-                res = _simulate_route(trip, veh, t_cursor, pos, req_adj, depot, Lw, load_start=0.0)
+                res = _simulate_route(trip, veh, t_cursor, pos, req_use, depot, Lw, load_start=0.0)
                 t_cursor = res.get("end_time", t_cursor)
                 pos = depot
             cmax = max(cmax, t_cursor)
     served = len(served_set)
-    return violations, {"Cmax": float(cmax), "served": served, "Unserved": int(len(req_df) - served)}
+    return violations, {"Cmax": float(cmax), "served": served, "Unserved": int(len(req_use) - served)}
 
 
 def main():

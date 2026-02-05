@@ -30,6 +30,10 @@ from src.gp import train_gphh, build_gp_policy_from_pair
 
 
 def _routes_from_timeline(timeline) -> Dict[int, List[Dict[str, float]]]:
+    """
+    Chuyển timeline (serve events) -> routes per vehicle, có chèn mốc về depot để tách tour.
+    Giả định: mỗi serve xong, xe quay về depot ngay sau khách (theo mô phỏng), nên chèn marker "DEPOT".
+    """
     routes = {}
     for ev in timeline:
         if not isinstance(ev, dict):
@@ -39,6 +43,8 @@ def _routes_from_timeline(timeline) -> Dict[int, List[Dict[str, float]]]:
         start = float(ev.get("start", ev.get("finish", 0.0)))
         finish = float(ev.get("finish", start))
         routes.setdefault(veh, []).append({"req": req_idx, "start": start, "finish": finish})
+        # marker quay về depot ngay sau khách này (để tách tour)
+        routes[veh].append({"req": "DEPOT", "start": finish, "finish": finish})
     for k in list(routes.keys()):
         routes[k] = sorted(routes[k], key=lambda r: r["start"])
     return routes
@@ -86,8 +92,20 @@ def write_output_file(pareto: List[dict], out_path: Path, cfg: dict):
     def trips_from_routes(routes: Dict[int, List[Dict[str, float]]]):
         trips = {}
         for veh_idx, stops in routes.items():
-            seq = [int(s["req"]) for s in sorted(stops, key=lambda r: r["start"])]
-            trips[veh_idx] = [seq] if seq else []
+            trips_list = []
+            current = []
+            for s in sorted(stops, key=lambda r: r["start"]):
+                rid = s["req"]
+                if rid == "DEPOT":
+                    if current:
+                        trips_list.append(current)
+                        current = []
+                    continue
+                rid_int = int(rid)
+                current.append(rid_int)
+            if current:
+                trips_list.append(current)
+            trips[veh_idx] = trips_list
         return trips
 
     lines = []
@@ -116,6 +134,7 @@ def main():
     ap.add_argument("--mode", choices=["baseline", "gp"], default="baseline", help="baseline (Greedy EDD) hoặc gp (train GP cho từng instance, dùng cho mọi run)")
     ap.add_argument("--instances-dir", default="WithTimeWindows")
     ap.add_argument("--outdir", default="results/my_benchmark")
+    ap.add_argument("--glob", default=None, help="Chỉ chạy các instance khớp glob (vd: 12.*)")
     args = ap.parse_args()
 
     cfg_base = load_yaml_utf8(args.config)
@@ -134,6 +153,8 @@ def main():
                 inst_name = inst_name[: -len(suf)]
                 break
         if inst_name in seen:
+            continue
+        if args.glob and not Path(inst_name).match(args.glob):
             continue
         seen.add(inst_name)
         cfg = dict(cfg_base)
@@ -156,7 +177,7 @@ def main():
                 {
                     "Cmax": float(stats["makespan"]),
                     "Unserved": int(stats["total"] - stats["served"]),
-                    "routes": routes,
+                    "routes": routes,  # contains DEPOT markers to split tours on export
                 }
             )
         pareto = pareto_filter(sols)
