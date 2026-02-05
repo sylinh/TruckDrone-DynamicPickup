@@ -1,4 +1,6 @@
 import operator, random, math
+import multiprocessing as mp
+from functools import partial
 from deap import gp, base, creator, tools
 from .policy import GPPolicy, build_baseline
 from .sim import run_episode
@@ -13,6 +15,10 @@ def protected_div(a, b):
         return a
 
 
+def tanh(x):
+    return math.tanh(x)
+
+
 def build_pset(n_args):
     pset = gp.PrimitiveSet("F", n_args)
     pset.addPrimitive(operator.add, 2)
@@ -23,7 +29,7 @@ def build_pset(n_args):
     pset.addPrimitive(max, 2)
     pset.addPrimitive(min, 2)
     pset.addPrimitive(abs, 1)
-    pset.addPrimitive(lambda x: math.tanh(x), 1, name="tanh")
+    pset.addPrimitive(tanh, 1, name="tanh")
     # rename args theo thực tự feature
     for i, name in enumerate(FEATURE_ORDER):
         pset.renameArguments(**{f"ARG{i}": name})
@@ -69,6 +75,10 @@ def evaluate_ind(cfg, ind_r, ind_s, req_df, T_ref):
     return F, stats
 
 
+def _fitness_parallel(pair, cfg, req_df, T_ref):
+    return (evaluate_ind(cfg, pair[0], pair[1], req_df, T_ref)[0],)
+
+
 def train_gphh(cfg):
     def _build_seed_pairs(tb, max_count):
         seeds_cfg = cfg.get("gp", {}).get("seed_pairs") or [
@@ -106,6 +116,11 @@ def train_gphh(cfg):
     stall_gens = cfg["gp"].get("stall_gens", None)
     stall_eps = float(cfg["gp"].get("stall_eps", 1e-4))
     k = cfg["gp"]["tournament_k"]
+    n_jobs = int(cfg["gp"].get("n_jobs", mp.cpu_count()))
+    ctx = mp.get_context("spawn")
+    pool = ctx.Pool(n_jobs) if n_jobs > 1 else None
+    map_fn = partial(pool.map, chunksize=2) if pool else map
+    fitness_fn = partial(_fitness_parallel, cfg=cfg, req_df=req_df, T_ref=T_ref)
 
     # each individual is a tuple (routing_tree, sequencing_tree)
     seed_ratio = float(cfg["gp"].get("seed_ratio", 0.15))
@@ -115,11 +130,6 @@ def train_gphh(cfg):
     while len(pop) < pop_size:
         pop.append((tb.individual(), tb.individual()))
 
-    def fitness(pair):
-        indR, indS = pair
-        F, _ = evaluate_ind(cfg, indR, indS, req_df, T_ref)
-        return (F,)
-
     def tournament_select(pop, fits, count, tournsize):
         out = []
         for _ in range(count):
@@ -128,56 +138,61 @@ def train_gphh(cfg):
             out.append(pop[best_i])
         return out
 
-    fits = list(map(fitness, pop))
-    best_fit = min(fits, key=lambda f: f[0])[0]
-    stall_counter = 0
-    for gen in range(gens):
-        order = sorted(range(len(pop)), key=lambda i: fits[i][0])
-        elites = [pop[order[0]], pop[order[1]]] if len(pop) >= 2 else [pop[order[0]]]
-        parents = elites + tournament_select(pop, fits, max(0, inter - len(elites)), k)
+    try:
+        fits = list(map_fn(fitness_fn, pop))
+        best_fit = min(fits, key=lambda f: f[0])[0]
+        stall_counter = 0
+        for gen in range(gens):
+            order = sorted(range(len(pop)), key=lambda i: fits[i][0])
+            elites = [pop[order[0]], pop[order[1]]] if len(pop) >= 2 else [pop[order[0]]]
+            parents = elites + tournament_select(pop, fits, max(0, inter - len(elites)), k)
 
-        offspring = []
-        while len(offspring) < pop_size:
-            a = random.choice(parents)
-            b = random.choice(parents)
-            ar, as_ = gp.PrimitiveTree(a[0]), gp.PrimitiveTree(a[1])
-            br, bs = gp.PrimitiveTree(b[0]), gp.PrimitiveTree(b[1])
-            if random.random() < cfg["gp"]["rc"]:
-                gp.cxOnePoint(ar, br)
-                gp.cxOnePoint(as_, bs)
-            if random.random() < cfg["gp"]["rm"]:
-                gp.mutUniform(ar, expr=tb.expr_mut, pset=tb.pset)
-            if random.random() < cfg["gp"]["rm"]:
-                gp.mutUniform(as_, expr=tb.expr_mut, pset=tb.pset)
-            offspring.append((ar, as_))
+            offspring = []
+            while len(offspring) < pop_size:
+                a = random.choice(parents)
+                b = random.choice(parents)
+                ar, as_ = gp.PrimitiveTree(a[0]), gp.PrimitiveTree(a[1])
+                br, bs = gp.PrimitiveTree(b[0]), gp.PrimitiveTree(b[1])
+                if random.random() < cfg["gp"]["rc"]:
+                    gp.cxOnePoint(ar, br)
+                    gp.cxOnePoint(as_, bs)
+                if random.random() < cfg["gp"]["rm"]:
+                    gp.mutUniform(ar, expr=tb.expr_mut, pset=tb.pset)
+                if random.random() < cfg["gp"]["rm"]:
+                    gp.mutUniform(as_, expr=tb.expr_mut, pset=tb.pset)
+                offspring.append((ar, as_))
 
-        # elitism: keep best from previous generation
+            # elitism: keep best from previous generation
+            best_idx = min(range(len(pop)), key=lambda i: fits[i][0])
+            best = pop[best_idx]
+
+            pop = offspring
+            fits = list(map_fn(fitness_fn, pop))
+
+            worst_idx = max(range(len(pop)), key=lambda i: fits[i][0])
+            pop[worst_idx] = best
+            fits[worst_idx] = fitness_fn(best)
+
+            best_now = min(fits, key=lambda f: f[0])[0]
+            print(f"[Gen {gen+1}/{gens}] best F = {best_now:.4f}")
+            if best_now + stall_eps < best_fit:
+                best_fit = best_now
+                stall_counter = 0
+            else:
+                stall_counter += 1
+            if stall_gens is not None and stall_counter >= int(stall_gens):
+                print(f"Early stop: no improvement for {stall_counter} generations (eps={stall_eps})")
+                break
+
         best_idx = min(range(len(pop)), key=lambda i: fits[i][0])
-        best = pop[best_idx]
-
-        pop = offspring
-        fits = list(map(fitness, pop))
-
-        worst_idx = max(range(len(pop)), key=lambda i: fits[i][0])
-        pop[worst_idx] = best
-        fits[worst_idx] = fitness(best)
-
-        best_now = min(fits, key=lambda f: f[0])[0]
-        print(f"[Gen {gen+1}/{gens}] best F = {best_now:.4f}")
-        if best_now + stall_eps < best_fit:
-            best_fit = best_now
-            stall_counter = 0
-        else:
-            stall_counter += 1
-        if stall_gens is not None and stall_counter >= int(stall_gens):
-            print(f"Early stop: no improvement for {stall_counter} generations (eps={stall_eps})")
-            break
-
-    best_idx = min(range(len(pop)), key=lambda i: fits[i][0])
-    best_pair = pop[best_idx]
-    _, stats = evaluate_ind(cfg, best_pair[0], best_pair[1], req_df, T_ref)
-    print("Best stats:", stats)
-    return best_pair
+        best_pair = pop[best_idx]
+        _, stats = evaluate_ind(cfg, best_pair[0], best_pair[1], req_df, T_ref)
+        print("Best stats:", stats)
+        return best_pair
+    finally:
+        if pool:
+            pool.close()
+            pool.join()
 
 
 def build_gp_policy_from_pair(cfg, pair):
